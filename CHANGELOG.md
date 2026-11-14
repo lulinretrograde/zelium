@@ -4,6 +4,9 @@
 
 Cross-browser and cross-OS hardening.
 
+- Default shortcut on Windows/Linux/ChromeOS is now **Alt+K**. Chromium refuses to assign Ctrl+K to
+  extensions there (it's the browser's search shortcut), so the palette previously had no shortcut on
+  those systems. macOS stays ⌘K.
 - Works in any Chromium browser ≥ 102 (Chrome, Edge, Brave, Vivaldi, Opera, Arc, Helium, …) on
   macOS, Windows, Linux and ChromeOS.
 - Any non-web page (`edge://`, `opera://`, `vivaldi://`, `arc://`, …) uses the fallback window;
@@ -22,7 +25,7 @@ Cross-browser and cross-OS hardening.
 
 First release.
 
-- Centred command palette, opened with ⌘K / Ctrl+K (rebindable).
+- Centred command palette, opened with ⌘K (rebindable).
 - Unified fuzzy search over open tabs, bookmarks, history and recently closed tabs.
 - Prefix modes: `@` tabs, `#` bookmarks, `/` history, `>` commands.
 - `!bang` site searches (`!yt`, `!gh`, `!w`, …) — prefix or suffix.

@@ -370,40 +370,45 @@
 
     onKey(e) {
       if (e.isComposing || e.keyCode === 229) return;
+      const action = this.keyAction(e);
+      if (!action) return;
+      // Swallow the event first: actions may close the palette and detach it
+      // from the page mid-dispatch, and the page must never see these keys.
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      // Closing actions run after the event has finished dispatching.
+      if (action.closes) setTimeout(action.run, 0);
+      else action.run();
+    }
+
+    /** Map a key event to an action, or null if the input should handle it normally. */
+    keyAction(e) {
       const mod = IS_MAC ? e.metaKey : e.ctrlKey;
       const key = e.key;
       const row = this.rows[this.sel];
-      let handled = true;
+      const act = (run, closes = false) => ({ run, closes });
 
-      if (key === 'Escape') {
-        this.close();
-      } else if (key === 'ArrowDown' || (e.ctrlKey && (key === 'n' || key === 'j'))) {
-        this.move(1);
-      } else if (key === 'ArrowUp' || (e.ctrlKey && (key === 'p' || key === 'k'))) {
-        this.move(-1);
-      } else if (key === 'PageDown') {
-        this.move(8, false);
-      } else if (key === 'PageUp') {
-        this.move(-8, false);
-      } else if (key === 'Enter') {
-        if (row) this.activate(row, this.dispositionFrom(e));
-      } else if (key === 'Tab') {
-        if (row?.kind === 'bang') this.completeBang(row);
-        else this.cycleMode(e.shiftKey ? -1 : 1);
-      } else if (key === 'Backspace' && mod && (IS_MAC || e.shiftKey) && (row?.kind === 'tab' || row?.kind === 'history')) {
-        this.removeRow(row);
-      } else if (key === 'Backspace' && this.input.value === '' && this.mode !== 'all') {
-        this.setMode('all');
-      } else if (mod && key.toLowerCase() === 'c' && this.input.selectionStart === this.input.selectionEnd && row?.url) {
-        this.copyText(row.url).then((ok) => this.renderFootRight(ok ? 'Copied URL' : 'Copy failed'));
-      } else {
-        handled = false;
+      if (key === 'Escape') return act(() => this.close(), true);
+      if (key === 'ArrowDown' || (e.ctrlKey && (key === 'n' || key === 'j'))) return act(() => this.move(1));
+      if (key === 'ArrowUp' || (e.ctrlKey && (key === 'p' || key === 'k'))) return act(() => this.move(-1));
+      if (key === 'PageDown') return act(() => this.move(8, false));
+      if (key === 'PageUp') return act(() => this.move(-8, false));
+      if (key === 'Enter') {
+        const disposition = this.dispositionFrom(e);
+        return act(() => row && this.activate(row, disposition), true);
       }
-
-      if (handled) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (key === 'Tab') {
+        return act(() => (row?.kind === 'bang' ? this.completeBang(row) : this.cycleMode(e.shiftKey ? -1 : 1)));
       }
+      if (key === 'Backspace' && mod && (IS_MAC || e.shiftKey) && (row?.kind === 'tab' || row?.kind === 'history')) {
+        return act(() => this.removeRow(row));
+      }
+      if (key === 'Backspace' && this.input.value === '' && this.mode !== 'all') return act(() => this.setMode('all'));
+      if (mod && key.toLowerCase() === 'c' && this.input.selectionStart === this.input.selectionEnd && row?.url) {
+        return act(() => this.copyText(row.url).then((ok) => this.renderFootRight(ok ? 'Copied URL' : 'Copy failed')));
+      }
+      return null;
     }
 
     cycleMode(dir) {

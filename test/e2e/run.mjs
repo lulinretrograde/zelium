@@ -19,7 +19,7 @@ import { existsSync, mkdtempSync, cpSync, readFileSync, writeFileSync, rmSync } 
 import { tmpdir, platform, homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listTargets, connect, sleep, waitFor, press } from './cdp.mjs';
+import { listTargets, connect, waitFor, press } from './cdp.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const HEADLESS = process.env.HEADLESS !== '0';
@@ -101,7 +101,8 @@ const PAGES = {
     <h1>Alpha</h1><input id="page-input">
     <script>
       window.__keys = 0;
-      document.addEventListener('keydown', () => window.__keys++);
+      window.__keyLog = [];
+      document.addEventListener('keydown', (e) => { window.__keys++; window.__keyLog.push(e.key + '@' + (document.activeElement?.tagName) + ' host=' + !!document.querySelector('zelium-palette') + ' focus=' + document.hasFocus()); });
     </script>`,
   '/b.html': `<!doctype html><title>Beta Docs</title><h1>Beta</h1>`,
   '/rtl.html': `<!doctype html><html dir="rtl" lang="ar"><title>صفحة</title><body style="direction:rtl">مرحبا</body></html>`,
@@ -183,7 +184,7 @@ async function main() {
     '--window-size=1280,860',
     ...(HEADLESS ? ['--headless=new'] : []),
     ...(platform() === 'linux' ? ['--no-sandbox'] : []),
-    `${base}/a.html`,
+    'about:blank',
   ];
   const child = spawn(browserPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = '';
@@ -222,15 +223,25 @@ async function main() {
       const t = await waitFor(swTarget, { timeout: 15000, message: 'Zelium service worker' });
       extId = new URL(t.url).host;
       sw = connect(t.webSocketDebuggerUrl);
-      const name = await sw.evaluate('chrome.runtime.getManifest().name');
+      // The worker can be listed before its script has run: wait for the extension APIs.
+      const name = await waitFor(() => sw.evaluate(`typeof chrome !== 'undefined' && chrome.runtime?.getManifest?.().name`), {
+        timeout: 15000,
+        message: 'extension APIs in service worker',
+      });
       assert(name === 'Zelium', `unexpected extension ${name}`);
     });
     if (!sw) throw new Error('Extension did not load; aborting.');
 
     const swEval = (expr) => sw.evaluate(`(async () => { ${expr} })()`);
-    const tabByUrl = (suffix) => swEval(`return (await chrome.tabs.query({})).find(t => (t.url || t.pendingUrl || '').endsWith(${JSON.stringify(suffix)}))`);
-    const toggle = (suffix) =>
-      swEval(`const t = (await chrome.tabs.query({})).find(t => (t.url || '').endsWith(${JSON.stringify(suffix)}));
+    // Tabs are tracked by id: browsers rewrite internal URLs (Edge: chrome:// → edge://).
+    const tabIds = {};
+    const getTab = (key) => swEval(`return await chrome.tabs.get(${tabIds[key]})`);
+    async function openTab(key, url, active = true) {
+      tabIds[key] = await swEval(`return (await chrome.tabs.create({ url: ${JSON.stringify(url)}, active: ${active} })).id`);
+      await waitFor(() => getTab(key).then((t) => t.status === 'complete'), { timeout: 10000, message: `${key} loaded` });
+    }
+    const toggle = (key) =>
+      swEval(`const t = await chrome.tabs.get(${tabIds[key]});
               await chrome.tabs.update(t.id, { active: true });
               await chrome.windows.update(t.windowId, { focused: true });
               await togglePalette(t);`);
@@ -246,6 +257,7 @@ async function main() {
         { message: 'shortcut label' },
       );
       console.log(`      shortcut: ${text}`);
+      assert(text !== 'not set', 'the browser did not assign the default shortcut (conflict)');
       page.close();
     });
 
@@ -267,12 +279,30 @@ async function main() {
       return page;
     }
 
+    /** Toggle the palette open on a tab and wait until it is open AND focused. */
+    async function openOn(key, page) {
+      await toggle(key);
+      await waitFor(
+        async () =>
+          (await page.palette('p && p.isOpen')) &&
+          (await page.evaluate(`document.activeElement?.localName === 'zelium-palette'`)),
+        { message: 'palette open and focused' },
+      );
+    }
+
+    /** Press Escape and wait until the overlay is gone (no-op if a page reload already removed it). */
+    async function closeOn(page) {
+      if (!(await page.evaluate(`!!document.querySelector('zelium-palette')`))) return;
+      await press(page, 'Escape');
+      await waitFor(async () => !(await page.evaluate(`!!document.querySelector('zelium-palette')`)), { message: 'palette closed' });
+    }
+
     let a;
     await test('overlay opens on a page with hostile CSS', async () => {
-      await toggle('/a.html');
+      await openTab('a', `${base}/a.html`);
       a = await attach('/a.html');
       await a.send('Page.bringToFront');
-      await waitFor(() => a.palette('p && p.isOpen'), { message: 'palette open' });
+      await openOn('a', a);
       const host = await a.evaluate(`(() => {
         const h = document.querySelector('zelium-palette');
         return h && { display: getComputedStyle(h).display, opacity: getComputedStyle(h).opacity,
@@ -285,22 +315,22 @@ async function main() {
     });
 
     await test('typing filters open tabs (fuzzy)', async () => {
-      await swEval(`await chrome.tabs.create({ url: ${JSON.stringify(`${base}/b.html`)}, active: false })`);
-      await waitFor(() => tabByUrl('/b.html').then((t) => t?.status === 'complete'), { message: 'tab b loaded' });
+      await openTab('b', `${base}/b.html`, false);
       // Re-open so the snapshot includes tab B.
-      await press(a, 'Escape');
-      await toggle('/a.html');
-      await waitFor(() => a.palette('p.isOpen && p.snapshot.tabs.length >= 2'), { message: 'snapshot' });
+      await closeOn(a);
+      await openOn('a', a);
+      await waitFor(() => a.palette('p.snapshot.tabs.length >= 2'), { message: 'snapshot' });
       await a.send('Input.insertText', { text: 'beta dcs' });
       const first = await waitFor(() => a.palette(`p.rows[0] && p.rows[0].title`), { message: 'results' });
       assert(first === 'Beta Docs', `first result was ${first}`);
     });
 
     await test('keystrokes do not leak to the page', async () => {
+      await a.evaluate('window.__keys = 0; window.__keyLog = []');
       await press(a, 'ArrowDown');
       await press(a, 'ArrowUp');
       const leaked = await a.evaluate('window.__keys');
-      assert(leaked === 0, `page saw ${leaked} keydown events`);
+      assert(leaked === 0, `page saw ${leaked} keydown events: ${await a.evaluate('JSON.stringify(window.__keyLog)')}`);
     });
 
     await test('Enter switches to the selected tab', async () => {
@@ -311,45 +341,47 @@ async function main() {
     });
 
     await test('calculator row', async () => {
-      await toggle('/a.html');
-      await waitFor(() => a.palette('p.isOpen'), { message: 'open' });
+      await a.send('Page.bringToFront');
+      await openOn('a', a);
       await a.send('Input.insertText', { text: '2*(3+4)^2' });
       const row = await waitFor(() => a.palette(`p.rows[0]`), { message: 'calc row' });
       assert(row.kind === 'calc' && row.title === '= 98', `got ${JSON.stringify(row.title)}`);
-      await press(a, 'Escape');
+      await closeOn(a);
     });
 
     await test('> command mode runs a command (Pin Tab)', async () => {
-      await toggle('/a.html');
-      await waitFor(() => a.palette('p.isOpen'), { message: 'open' });
+      await a.send('Page.bringToFront');
+      await openOn('a', a);
       await a.send('Input.insertText', { text: '>pin tab' });
       const mode = await a.palette('p.mode');
       assert(mode === 'commands', `mode is ${mode}`);
       await waitFor(() => a.palette(`p.rows[0]?.data?.id === 'tab.togglePin'`), { message: 'Pin Tab row' });
       await press(a, 'Enter');
-      await waitFor(() => tabByUrl('/a.html').then((t) => t.pinned), { message: 'tab pinned' });
-      await swEval(`const t = (await chrome.tabs.query({ pinned: true }))[0]; await chrome.tabs.update(t.id, { pinned: false });`);
+      await waitFor(() => getTab('a').then((t) => t.pinned), { message: 'tab pinned' });
+      await swEval(`await chrome.tabs.update(${tabIds.a}, { pinned: false })`);
     });
 
     await test('!bang builds a site search URL', async () => {
-      await toggle('/a.html');
-      await waitFor(() => a.palette('p.isOpen'), { message: 'open' });
+      await a.send('Page.bringToFront');
+      await openOn('a', a);
       await a.send('Input.insertText', { text: '!yt lofi' });
       const url = await waitFor(() => a.palette(`p.rows[0]?.url`), { message: 'bang row' });
       assert(url === 'https://www.youtube.com/results?search_query=lofi', url);
     });
 
-    await test('Escape closes and removes the overlay', async () => {
-      await press(a, 'Escape');
-      await waitFor(async () => !(await a.evaluate(`!!document.querySelector('zelium-palette')`)), { message: 'host removed' });
+    await test('Escape closes the overlay without leaking the key', async () => {
+      await a.evaluate('window.__keys = 0; window.__keyLog = []');
+      assert(await a.evaluate(`!!document.querySelector('zelium-palette')`), 'palette not open before Escape');
+      await closeOn(a);
+      const leaked = await a.evaluate('window.__keys');
+      assert(leaked === 0, `page saw the Escape: ${await a.evaluate('JSON.stringify(window.__keyLog)')}`);
     });
 
     await test('layout stays left-to-right on RTL pages', async () => {
-      await swEval(`await chrome.tabs.create({ url: ${JSON.stringify(`${base}/rtl.html`)} })`);
-      await waitFor(() => tabByUrl('/rtl.html').then((t) => t?.status === 'complete'), { message: 'rtl loaded' });
-      await toggle('/rtl.html');
+      await openTab('rtl', `${base}/rtl.html`);
       const r = await attach('/rtl.html');
-      await waitFor(() => r.palette('p && p.isOpen'), { message: 'open' });
+      await r.send('Page.bringToFront');
+      await openOn('rtl', r);
       const dir = await r.palette(`getComputedStyle(p.wrap).direction`);
       assert(dir === 'ltr', `direction ${dir}`);
       await press(r, 'Escape');
@@ -359,9 +391,8 @@ async function main() {
     const fallbackTarget = () => findTarget((t) => t.type === 'page' && t.url.includes('/fallback.html'));
 
     await test('fallback window on browser-internal pages', async () => {
-      await swEval(`await chrome.tabs.create({ url: 'chrome://version' })`);
-      await sleep(500);
-      await toggle('chrome://version/');
+      await openTab('internal', 'chrome://version');
+      await toggle('internal');
       const t = await waitFor(fallbackTarget, { message: 'fallback window' });
       const fb = connect(t.webSocketDebuggerUrl);
       const n = await waitFor(() => fb.evaluate(`document.querySelectorAll('.z-row').length`), { message: 'fallback rows' });
@@ -369,25 +400,23 @@ async function main() {
       const popup = await swEval(`return (await chrome.windows.getAll()).filter(w => w.type === 'popup').length`);
       assert(popup === 1, `expected 1 popup window, got ${popup}`);
       // Pressing the shortcut again closes it.
-      await toggle('chrome://version/');
+      await toggle('internal');
       await waitFor(async () => !(await fallbackTarget()), { message: 'fallback closed' });
       fb.close();
     });
 
     await test('XML files (browser XML viewer) get the overlay', async () => {
-      await swEval(`await chrome.tabs.create({ url: ${JSON.stringify(`${base}/data.xml`)} })`);
-      await waitFor(() => tabByUrl('/data.xml').then((t) => t?.status === 'complete'), { message: 'xml loaded' });
-      await toggle('/data.xml');
+      await openTab('xml', `${base}/data.xml`);
       const x = await attach('/data.xml');
-      await waitFor(() => x.palette('p && p.isOpen'), { message: 'overlay open' });
+      await x.send('Page.bringToFront');
+      await openOn('xml', x);
       await press(x, 'Escape');
       x.close();
     });
 
     await test('non-HTML documents (raw SVG) use the fallback window', async () => {
-      await swEval(`await chrome.tabs.create({ url: ${JSON.stringify(`${base}/img.svg`)} })`);
-      await waitFor(() => tabByUrl('/img.svg').then((t) => t?.status === 'complete'), { message: 'svg loaded' });
-      await toggle('/img.svg');
+      await openTab('svg', `${base}/img.svg`);
+      await toggle('svg');
       await waitFor(fallbackTarget, { message: 'fallback window' });
       await swEval(`await closeFallbackWindow()`);
     });

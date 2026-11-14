@@ -1,7 +1,7 @@
 # Zelium
 
 A Zed-style command palette for [Helium](https://helium.computer) and every other Chromium browser, on macOS, Windows, Linux and ChromeOS.
-Press **⌘K** and a sharp, dark palette opens in the middle of the screen. From one input you can search
+Press **⌘K** (macOS) or **Alt+K** (Windows/Linux/ChromeOS) and a sharp, dark palette opens in the middle of the screen. From one input you can search
 your open tabs, bookmarks, history and recently closed tabs, run browser commands, do quick maths or
 search the web.
 
@@ -57,8 +57,10 @@ fallback window.
 
 Browser-specific details are handled automatically:
 
-- **Shortcut:** <kbd>⌘K</kbd> on macOS, <kbd>Ctrl+K</kbd> on Windows/Linux/ChromeOS. If another
-  extension already uses it, the browser leaves Zelium without a shortcut. The welcome page (also
+- **Shortcut:** <kbd>⌘K</kbd> on macOS, <kbd>Alt+K</kbd> on Windows/Linux/ChromeOS. Chromium won't
+  give extensions <kbd>Ctrl+K</kbd> by default there, because it's the browser's own search shortcut; you
+  can still pick it by hand in the shortcut settings. If another extension already uses Zelium's
+  shortcut, the browser leaves Zelium without one. The welcome page (also
   available as Zelium's *Options*) detects this and links to the browser's shortcut settings. The
   toolbar button always works too.
 - **Browser pages** (`chrome://`, `edge://`, `brave://`, `opera://`, `vivaldi://`, new tab pages,
@@ -75,8 +77,8 @@ Browser-specific details are handled automatically:
 
 | Key | Action |
 | --- | --- |
-| <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> | open / close the palette |
-| <kbd>↑</kbd> <kbd>↓</kbd> · <kbd>Ctrl+J</kbd> <kbd>Ctrl+P</kbd> (macOS also <kbd>Ctrl+N</kbd> <kbd>Ctrl+K</kbd>) | move the selection |
+| <kbd>⌘K</kbd> (macOS) / <kbd>Alt+K</kbd> (Windows, Linux, ChromeOS) | open / close the palette |
+| <kbd>↑</kbd> <kbd>↓</kbd> · <kbd>Ctrl+J</kbd> <kbd>Ctrl+K</kbd> · <kbd>Ctrl+P</kbd> (macOS also <kbd>Ctrl+N</kbd>) | move the selection |
 | <kbd>PgUp</kbd> <kbd>PgDn</kbd> | jump 8 rows |
 | <kbd>↵</kbd> | open / switch / run |
 | <kbd>⌘↵</kbd> / <kbd>Ctrl+↵</kbd> | open in a new tab |
@@ -101,7 +103,7 @@ Zelium isn't on a store yet, so load it unpacked:
    accepts `edge://extensions`, Opera `opera://extensions`).
 3. Turn on **Developer mode**.
 4. Click **Load unpacked** and pick the **`src/`** folder (or the unzipped folder).
-5. A welcome page opens and shows your shortcut. Press it on any page.
+5. A welcome page opens and shows your shortcut (⌘K on macOS, Alt+K elsewhere). Press it on any page.
 
 ## How it works
 

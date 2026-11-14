@@ -28,7 +28,7 @@
   "commands": {
     "toggle-palette": {
       "suggested_key": {
-        "default": "Ctrl+K",
+        "default": "Alt+K",
         "mac": "Command+K"
       },
       "description": "Open / close the Zelium palette"
