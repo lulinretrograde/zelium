@@ -6,35 +6,136 @@
   const Z = (globalThis.Zelium ??= {});
 
   // -------------------------------------------------------------------------
-  // Bangs
+  // Bangs — the same list Helium uses natively (Kagi bangs + Helium extras,
+  // ~10k sites). The full list is loaded on demand with setBangs(); until then
+  // a few popular ones work, with identical triggers and URLs.
+  // Row format: [name, "trigger1 trigger2 …", urlTemplate, flags?, category?]
   // -------------------------------------------------------------------------
 
-  const BANGS = [
-    { key: 'g', name: 'Google', url: 'https://www.google.com/search?q=%s' },
-    { key: 'ddg', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=%s' },
-    { key: 'b', name: 'Brave Search', url: 'https://search.brave.com/search?q=%s' },
-    { key: 'yt', name: 'YouTube', url: 'https://www.youtube.com/results?search_query=%s' },
-    { key: 'gh', name: 'GitHub', url: 'https://github.com/search?q=%s&type=repositories' },
-    { key: 'w', name: 'Wikipedia', url: 'https://en.wikipedia.org/w/index.php?search=%s' },
-    { key: 'wd', name: 'Wikipedia (DE)', url: 'https://de.wikipedia.org/w/index.php?search=%s' },
-    { key: 'r', name: 'Reddit', url: 'https://www.reddit.com/search/?q=%s' },
-    { key: 'so', name: 'Stack Overflow', url: 'https://stackoverflow.com/search?q=%s' },
-    { key: 'mdn', name: 'MDN Web Docs', url: 'https://developer.mozilla.org/en-US/search?q=%s' },
-    { key: 'npm', name: 'npm', url: 'https://www.npmjs.com/search?q=%s' },
-    { key: 'crates', name: 'crates.io', url: 'https://crates.io/search?q=%s' },
-    { key: 'hn', name: 'Hacker News', url: 'https://hn.algolia.com/?q=%s' },
-    { key: 'm', name: 'OpenStreetMap', url: 'https://www.openstreetmap.org/search?query=%s' },
-    { key: 'a', name: 'Amazon', url: 'https://www.amazon.com/s?k=%s' },
-    { key: 'dl', name: 'DeepL', url: 'https://www.deepl.com/translator#auto/en/%s' },
+  const DEFAULT_ROWS = [
+    ['Wikipedia', 'w wiki wikipedia', 'https://wikipedia.org/w/index.php?search={searchTerms}'],
+    ['Google', 'g google', 'https://www.google.com/search?q={searchTerms}'],
+    ['YouTube', 'yt youtube', 'https://www.youtube.com/results?search_query={searchTerms}'],
+    ['GitHub', 'gh github', 'https://github.com/search?q={searchTerms}'],
+    ['DuckDuckGo', 'ddg duckduckgo', 'https://duckduckgo.com/?q={searchTerms}'],
+    ['Brave Search', 'brave', 'https://search.brave.com/search?q={searchTerms}'],
+    ['Reddit', 'r reddit', 'https://www.reddit.com/search?q={searchTerms}'],
+    ['Amazon.com', 'a amazon', 'https://www.amazon.com/s?k={searchTerms}'],
+    ['StackOverflow', 'so stackoverflow', 'https://stackoverflow.com/search?q={searchTerms}'],
+    ['MDN Web Docs', 'mdn', 'https://developer.mozilla.org/search?q={searchTerms}'],
+    ['npm', 'npm', 'https://www.npmjs.com/search?q={searchTerms}'],
+    ['Google Maps', 'gm', 'https://maps.google.com/maps?q={searchTerms}'],
+    ['Wolfram Alpha', 'wa', 'https://wolframalpha.com/input?i={searchTerms}'],
+    ['Hacker News', 'hn', 'https://hn.algolia.com/?q={searchTerms}', 14],
   ];
-  const BANG_MAP = new Map(BANGS.map((b) => [b.key, b]));
+
+  // Shown for a bare "!" — the most useful ones first.
+  const POPULAR = ['w', 'g', 'yt', 'gh', 'ddg', 'brave', 'r', 'a', 'so', 'mdn', 'npm', 'gm', 'wa', 'hn'];
+
+  // "f" bitmask from the source data (Kagi/DDG "fmt" semantics).
+  const F_OPEN_BASE = 1;
+  const F_ENCODE = 2;
+  const F_SPACE_PLUS = 4;
+
+  let bangIndex = null;
+  let fullListLoaded = false;
+
+  function buildIndex(rows) {
+    const map = new Map();
+    const sorted = [];
+    rows.forEach(([name, triggers, url, flags, category], index) => {
+      const entry = { name, triggers: triggers.split(' '), url, flags: flags || 0, ai: category === 'ai', index };
+      for (const t of entry.triggers) {
+        const key = t.toLowerCase();
+        if (map.has(key)) continue;
+        map.set(key, entry);
+        sorted.push(key);
+      }
+    });
+    sorted.sort();
+    return { map, sorted };
+  }
+
+  function index() {
+    bangIndex ??= buildIndex(DEFAULT_ROWS);
+    return bangIndex;
+  }
+
+  /** Install the full bang list (rows in the compact format above). */
+  function setBangs(rows) {
+    bangIndex = buildIndex(rows);
+    fullListLoaded = true;
+  }
+
+  const hasFullBangs = () => fullListLoaded;
+
+  /** A user-facing bang object for a trigger. */
+  function bangFor(trigger) {
+    const entry = index().map.get(trigger.toLowerCase());
+    if (!entry) return null;
+    let host = '';
+    try {
+      host = new URL(entry.url.replaceAll('{searchTerms}', '')).hostname.replace(/^www\./, '');
+    } catch {
+      /* ignore */
+    }
+    return { key: trigger.toLowerCase(), name: entry.name, url: entry.url, flags: entry.flags, ai: entry.ai, host, entry };
+  }
+
+  function encodeTerms(bang, query) {
+    const f = bang.flags;
+    // No flags = defaults: encode the query; spaces become "+" in the query string.
+    const encode = !f || f & F_ENCODE;
+    const plus = f ? f & F_SPACE_PLUS : bang.url.indexOf('{searchTerms}') > bang.url.indexOf('?') && bang.url.includes('?');
+    let s = encode ? encodeURIComponent(query) : query;
+    if (plus) s = encode ? s.replace(/%20/g, '+') : s.replace(/ /g, '+');
+    return s;
+  }
 
   function bangUrl(bang, query) {
-    return bang.url.replace('%s', encodeURIComponent(query));
+    return bang.url.replaceAll('{searchTerms}', encodeTerms(bang, query));
+  }
+
+  /** Where a bang with no query goes: the site itself. */
+  function bangHome(bang) {
+    try {
+      return new URL(bang.url.replaceAll('{searchTerms}', '')).origin;
+    } catch {
+      return bang.url;
+    }
+  }
+
+  /** Bangs whose trigger starts with `typed`: exact match first, then shortest trigger. */
+  function suggestBangs(typed, limit = 8) {
+    const { map, sorted } = index();
+    if (!typed) return POPULAR.map(bangFor).filter(Boolean).slice(0, limit);
+    const t = typed.toLowerCase();
+    // Binary search for the first trigger >= t.
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid] < t) lo = mid + 1;
+      else hi = mid;
+    }
+    const hits = [];
+    for (let i = lo; i < sorted.length && sorted[i].startsWith(t) && hits.length < 400; i++) hits.push(sorted[i]);
+    hits.sort((a, b) => (a === t ? -1 : b === t ? 1 : a.length - b.length || map.get(a).index - map.get(b).index));
+    const seen = new Set();
+    const out = [];
+    for (const key of hits) {
+      const entry = map.get(key);
+      if (seen.has(entry)) continue;
+      seen.add(entry);
+      out.push(bangFor(key));
+      if (out.length >= limit) break;
+    }
+    return out;
   }
 
   /**
-   * "!yt lofi" / "lofi !yt"  -> { kind:'search', bang, query }
+   * "!yt lofi" / "lofi !yt"  -> { kind:'search', bang, query, url }
+   * "!w " (bang + space)     -> { kind:'home', bang, url }   (opens the site)
    * "!y" (no space yet)      -> { kind:'partial', typed:'y', matches:[...] }
    */
   function parseBang(input) {
@@ -43,21 +144,21 @@
 
     const partial = /^!(\S*)$/.exec(text);
     if (partial) {
-      const typed = partial[1].toLowerCase();
-      const exact = BANG_MAP.get(typed);
-      const matches = BANGS.filter((b) => b.key.startsWith(typed) || b.name.toLowerCase().startsWith(typed));
-      if (exact) matches.sort((a, b) => (b === exact) - (a === exact));
-      return { kind: 'partial', typed, matches };
+      const typed = partial[1];
+      const exact = typed && bangFor(typed);
+      // "!w " — the user finished the trigger without a query.
+      if (exact && /\s$/.test(input)) return { kind: 'home', bang: exact, url: bangHome(exact) };
+      return { kind: 'partial', typed: typed.toLowerCase(), matches: suggestBangs(typed) };
     }
 
     const tokens = text.split(/\s+/);
     for (let i = 0; i < tokens.length; i++) {
       const t = tokens[i];
       if (t.length < 2 || t[0] !== '!') continue;
-      const bang = BANG_MAP.get(t.slice(1).toLowerCase());
+      const bang = bangFor(t.slice(1));
       if (!bang) continue;
       const query = [...tokens.slice(0, i), ...tokens.slice(i + 1)].join(' ').trim();
-      if (!query) return { kind: 'partial', typed: bang.key, matches: [bang] };
+      if (!query) return { kind: 'home', bang, url: bangHome(bang) };
       return { kind: 'search', bang, query, url: bangUrl(bang, query) };
     }
     return null;
@@ -278,5 +379,5 @@
     return `${Math.floor(d / 365)}y`;
   }
 
-  Z.parse = { BANGS, parseBang, bangUrl, detectUrl, calculate, evaluate, displayUrl, relativeTime };
+  Z.parse = { setBangs, hasFullBangs, suggestBangs, bangFor, bangHome, parseBang, bangUrl, detectUrl, calculate, evaluate, displayUrl, relativeTime };
 })();

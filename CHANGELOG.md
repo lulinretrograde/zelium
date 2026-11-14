@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 — 2026-11-14
+
+- **Helium's bangs:** the full list Helium uses natively (Kagi bangs + Helium extras: 10,735 sites,
+  13,438 triggers) replaces the 16 hand-picked bangs. Same triggers and URLs as Helium's address bar
+  (`!w`, `!gh`, `!yt`, `!wd`, …).
+- Prefix suggestions for any trigger (`!gh` → GitHub, GitHub Code, GitHub Docs, …), exact match first.
+- `!w` + Enter (no query) opens the site itself.
+- Honours each bang's format flags (e.g. the Wayback Machine gets the URL unencoded).
+- AI bangs are labelled. The list loads lazily the first time `!` is typed; no network requests.
+- `npm run bangs` refreshes the list from Helium's services.
+
 ## 0.2.0 — 2026-11-14
 
 Cross-browser and cross-OS hardening.

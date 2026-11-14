@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Zelium",
   "short_name": "Zelium",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A Zed-style command palette for Helium and every Chromium browser: search tabs, bookmarks, history, commands and the web from one box.",
   "minimum_chrome_version": "102",
   "icons": {
@@ -49,6 +49,7 @@
     {
       "resources": [
         "palette/palette.css",
+        "third_party/bangs/bangs.json",
         "_favicon/*"
       ],
       "matches": [

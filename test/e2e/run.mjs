@@ -380,12 +380,23 @@ async function main() {
       await swEval(`await chrome.tabs.update(${tabIds.a}, { pinned: false })`);
     });
 
-    await test('!bang builds a site search URL', async () => {
+    await test('!bangs: full Helium list loads on demand', async () => {
       await a.send('Page.bringToFront');
       await openOn('a', a);
-      await a.send('Input.insertText', { text: '!yt lofi' });
-      const url = await waitFor(() => a.palette(`p.rows[0]?.url`), { message: 'bang row' });
-      assert(url === 'https://www.youtube.com/results?search_query=lofi', url);
+      // "crates" isn't in the built-in set, so this needs the full list.
+      await a.send('Input.insertText', { text: 'serde !crates' });
+      const url = await waitFor(() => a.palette(`p.rows[0]?.kind === 'bangSearch' && p.rows[0].url`), { message: 'bang row' });
+      assert(url === 'https://crates.io/search?q=serde', url);
+    });
+
+    await test('!bangs: suggestions, then Enter + "!w " opens the site', async () => {
+      await closeOn(a);
+      await openOn('a', a);
+      await a.send('Input.insertText', { text: '!w' });
+      await waitFor(() => a.palette(`p.rows[0]?.kind === 'bang' && p.rows[0].data.key === 'w'`), { message: '!w suggestion' });
+      await press(a, 'Enter'); // completes to "!w "
+      const row = await waitFor(() => a.palette(`p.input.value === '!w ' && p.rows[0]`), { message: 'completed bang' });
+      assert(row.kind === 'bangSearch' && row.url === 'https://wikipedia.org', JSON.stringify(row.url));
     });
 
     await test('Escape closes the overlay without leaking the key', async () => {

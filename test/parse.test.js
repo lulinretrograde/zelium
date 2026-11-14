@@ -1,7 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 require('../src/palette/parse.js');
-const { detectUrl, calculate, parseBang, displayUrl, relativeTime } = globalThis.Zelium.parse;
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
+const { detectUrl, calculate, parseBang, setBangs, hasFullBangs, displayUrl, relativeTime } = globalThis.Zelium.parse;
 
 test('detectUrl: domains, schemes, localhost, IPs', () => {
   assert.equal(detectUrl('github.com'), 'https://github.com');
@@ -40,23 +42,62 @@ test('calculate: ignores non-math input', () => {
   assert.equal(calculate('foo(2)'), null);
 });
 
-test('parseBang: prefix, suffix and partial forms', () => {
+test('built-in bangs work before the full list loads', () => {
   const a = parseBang('!yt lofi beats');
   assert.equal(a.kind, 'search');
   assert.equal(a.bang.key, 'yt');
   assert.equal(a.query, 'lofi beats');
-  assert.equal(a.url, 'https://www.youtube.com/results?search_query=lofi%20beats');
+  assert.equal(a.url, 'https://www.youtube.com/results?search_query=lofi+beats');
+  assert.equal(parseBang('!w cats').url, 'https://wikipedia.org/w/index.php?search=cats');
+});
 
-  const b = parseBang('serde !crates');
-  assert.equal(b.kind, 'search');
-  assert.equal(b.query, 'serde');
+test('full Helium bang list: same triggers as Helium', () => {
+  setBangs(JSON.parse(readFileSync(join(__dirname, '../src/third_party/bangs/bangs.json'), 'utf8')));
+  assert.ok(hasFullBangs());
+  const cases = {
+    '!w cats': 'https://wikipedia.org/w/index.php?search=cats',
+    '!gh zed': 'https://github.com/search?q=zed',
+    '!g a b': 'https://www.google.com/search?q=a+b',
+    '!wikipedia x': 'https://wikipedia.org/w/index.php?search=x',
+    '!YT lofi': 'https://www.youtube.com/results?search_query=lofi',
+    'serde !crates': 'https://crates.io/search?q=serde',
+    '!wd Q42': 'https://www.wikidata.org/w/index.php?search=Q42',
+  };
+  for (const [input, url] of Object.entries(cases)) assert.equal(parseBang(input)?.url, url, input);
+});
 
-  const c = parseBang('!g');
-  assert.equal(c.kind, 'partial');
-  assert.equal(c.matches[0].key, 'g');
+test('bang format flags: raw (unencoded) templates', () => {
+  // Wayback Machine (f=1) takes the URL as-is.
+  assert.equal(parseBang('!ia https://example.com/a?b=1').url, 'https://web.archive.org/web/*/https://example.com/a?b=1');
+});
 
+test('bang with no query opens the site', () => {
+  const r = parseBang('!w ');
+  assert.equal(r.kind, 'home');
+  assert.equal(r.url, 'https://wikipedia.org');
+  assert.equal(parseBang('cats'), null);
+});
+
+test('partial bangs suggest by trigger prefix, exact match first', () => {
+  const r = parseBang('!gh');
+  assert.equal(r.kind, 'partial');
+  assert.equal(r.matches[0].key, 'gh');
+  assert.equal(r.matches[0].name, 'GitHub');
+  assert.ok(r.matches.length > 1 && r.matches.every((m) => m.key.startsWith('gh')));
+  const popular = parseBang('!');
+  assert.equal(popular.matches[0].key, 'w');
+});
+
+test('unknown bangs are left alone', () => {
+  assert.equal(parseBang('hey !zzzzunknown thing'), null);
   assert.equal(parseBang('no bang here'), null);
-  assert.equal(parseBang('hey !unknown thing'), null);
+  assert.equal(parseBang('!zzzzunknown').matches.length, 0);
+});
+
+test('AI bangs are flagged', () => {
+  const r = parseBang('!chatgpt hello');
+  assert.equal(r.url, 'https://chatgpt.com/?prompt=hello');
+  assert.equal(r.bang.ai, true);
 });
 
 test('displayUrl strips scheme, www and trailing slash', () => {

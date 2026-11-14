@@ -252,7 +252,7 @@
           keys.push(['↵', 'copy']);
           break;
         case 'bang':
-          keys.push(['⇥', 'select']);
+          keys.push(['↵', 'pick']);
           break;
       }
       keys.push(['esc', 'close']);
@@ -342,6 +342,7 @@
       }
       this.query = value;
       this.sel = 0;
+      if (value.includes('!')) this.ensureBangs();
       this.update();
       this.scheduleHistory();
     }
@@ -531,23 +532,26 @@
         ];
       }
 
-      const bang = P.parseBang(q);
-      if (bang?.kind === 'partial') {
-        return [{ title: 'Site search', rows: bang.matches.map((b) => this.bangRow(b)) }];
+      // Raw query: a trailing space after "!w" means "open the site".
+      const bang = P.parseBang(this.query);
+      if (bang?.kind === 'partial' && bang.matches.length) {
+        return [{ title: P.hasFullBangs() ? 'Bangs' : 'Bangs (loading full list…)', rows: bang.matches.map((b) => this.bangRow(b)) }];
       }
-      if (bang?.kind === 'search') {
+      if (bang?.kind === 'search' || bang?.kind === 'home') {
+        const b = bang.bang;
+        const home = bang.kind === 'home';
         return [
           {
-            title: 'Site search',
+            title: 'Bang',
             rows: [
               {
-                key: `bangSearch:${bang.bang.key}`,
+                key: `bangSearch:${b.key}:${bang.kind}`,
                 kind: 'bangSearch',
                 icon: 'bang',
-                fav: bang.url,
-                title: `Search ${bang.bang.name} for “${bang.query}”`,
+                fav: P.bangHome(b),
+                title: home ? `Open ${b.name}` : `Search ${b.name} for “${bang.query}”`,
                 sub: P.displayUrl(bang.url),
-                meta: `!${bang.bang.key}`,
+                meta: `!${b.key}${b.ai ? ' · AI' : ''}`,
                 url: bang.url,
               },
             ],
@@ -733,16 +737,33 @@
     }
 
     bangRow(b) {
-      const host = P.displayUrl(b.url.split('?')[0].split('#')[0]);
       return {
         key: `bang:${b.key}`,
         kind: 'bang',
-        fav: b.url,
+        fav: P.bangHome(b),
         title: `!${b.key}`,
         sub: b.name,
-        meta: host,
+        meta: `${b.host}${b.ai ? ' · AI' : ''}`,
         data: b,
       };
+    }
+
+    /**
+     * Load the full bang list (~10k sites, same as Helium's) the first time
+     * the user types "!". Until it arrives, a built-in set of popular bangs works.
+     */
+    ensureBangs() {
+      if (P.hasFullBangs() || this.bangsLoading) return;
+      this.bangsLoading = fetch(chrome.runtime.getURL('third_party/bangs/bangs.json'))
+        .then((r) => r.json())
+        .then((rows) => {
+          P.setBangs(rows);
+          if (this.isOpen) this.update({ keepSel: true });
+        })
+        .catch((err) => {
+          console.warn('[Zelium] could not load bangs', err);
+          this.bangsLoading = null;
+        });
     }
 
     // ----- rendering ---------------------------------------------------------

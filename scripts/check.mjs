@@ -31,6 +31,8 @@ const refs = [
   ...Object.values(manifest.action.default_icon),
   'palette/palette.css',
   'fallback.html',
+  'welcome.html',
+  'third_party/bangs/bangs.json',
 ];
 const bg = readFileSync(join(src, 'background.js'), 'utf8');
 const files = /PALETTE_FILES = \[([^\]]+)\]/.exec(bg)[1].match(/'([^']+)'/g).map((s) => s.slice(1, -1));
@@ -39,6 +41,14 @@ for (const ref of [...refs, ...files]) {
     failed = true;
     console.error(`✗ missing file referenced by extension: ${ref}`);
   }
+}
+
+try {
+  const bangs = JSON.parse(readFileSync(join(src, 'third_party/bangs/bangs.json'), 'utf8'));
+  if (!Array.isArray(bangs) || bangs.length < 1000) throw new Error(`only ${bangs.length} entries`);
+} catch (e) {
+  failed = true;
+  console.error(`✗ bangs.json invalid: ${e.message}`);
 }
 
 if (failed) process.exit(1);

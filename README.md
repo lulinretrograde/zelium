@@ -23,9 +23,13 @@ search the web.
   | `>` | commands |
 
   <kbd>Tab</kbd> / <kbd>⇧Tab</kbd> cycles between modes. <kbd>⌫</kbd> on an empty input goes back to *all*.
-- **Bangs** search a site directly: `!yt lofi`, `serde !crates`, `!gh zed`. Type `!` to see the list
-  (Google, DuckDuckGo, Brave, YouTube, GitHub, Wikipedia EN/DE, Reddit, Stack Overflow, MDN, npm,
-  crates.io, Hacker News, OpenStreetMap, Amazon, DeepL).
+- **Bangs, the same ones Helium has:** 10,700+ sites (13,400 triggers) from the list Helium uses
+  natively (Kagi's bangs plus Helium's extras). They work anywhere in the query, as a prefix or a
+  suffix: `!w zed`, `serde !crates`, `!gh helium`, `!yt lofi`, `!chatgpt …`.
+  - Type `!` for popular bangs, or `!gh` for every trigger starting with "gh". <kbd>↵</kbd> or <kbd>Tab</kbd> picks one.
+  - A bang with no query (`!w` then <kbd>↵</kbd>) opens the site itself.
+  - AI bangs are labelled. The list ships with the extension and loads the first time you type `!`,
+    so there are no network requests. Run `npm run bangs` to refresh it.
 - **Calculator:** `2*(3+4)`, `sqrt(2)^2`, `2*pi`. <kbd>↵</kbd> copies the result.
 - **Direct URLs:** `github.com`, `localhost:3000`, `192.168.1.1` open straight away.
 - **Web search** goes through **your browser's default search engine**.
@@ -117,11 +121,12 @@ src/
 ├── content.js           mounts the palette in a closed shadow root + top-layer popover
 ├── fallback.html/.js    popup window used on pages that can't be scripted
 ├── welcome.html/.css/.js  welcome + options page (shows/fixes the shortcut)
+├── third_party/bangs/   Helium's bang list (MIT, Kagi + imput), compacted by scripts/update-bangs.mjs
 └── palette/
     ├── palette.js       UI: modes, ranking, rendering, keyboard handling
     ├── palette.css      Zed One Dark theme
     ├── fuzzy.js         fuzzy matcher (word-start / consecutive bonuses, highlight ranges)
-    ├── parse.js         URL detection, calculator (no eval), !bangs, formatting helpers
+    ├── parse.js         URL detection, calculator (no eval), !bang engine, formatting helpers
     ├── commands.js      command definitions for ">" mode
     └── icons.js         inline 16px sharp-stroke SVG icons
 ```
@@ -158,6 +163,7 @@ npm run e2e       # real-browser tests (auto-detects an installed Chromium brows
 npm run check     # syntax-check all JS + verify manifest references
 npm run build     # check + zip src/ into dist/zelium-<version>.zip
 npm run icons     # regenerate src/icons/*.png
+npm run bangs     # refresh src/third_party/bangs from Helium's services
 ```
 
 Requires Node ≥ 22 for the scripts. The extension itself has no dependencies.
@@ -181,4 +187,5 @@ Corners are square, borders are 1px, and the type is monospace (`Zed Plex Mono` 
 
 ## License
 
-MIT
+MIT. The bang list in `src/third_party/bangs/` is MIT-licensed by Kagi Search and imput; see its
+`LICENSE` file.
