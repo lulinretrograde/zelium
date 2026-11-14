@@ -41,8 +41,9 @@ jobs:
           ZELIUM_DOWNLOAD_CHROME: '1'
 
   e2e-browsers:
-    # Other preinstalled Chromium browsers. Branded builds may refuse
-    # --load-extension, so these are informative rather than required.
+    # Other preinstalled Chromium browsers. Informative rather than required:
+    # branded builds may refuse --load-extension (branded Google Chrome 137+
+    # always does, so it isn't listed — Chrome for Testing above covers it).
     name: E2E · ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     continue-on-error: true
@@ -56,9 +57,6 @@ jobs:
           - name: Edge (Linux)
             os: ubuntu-latest
             path: /usr/bin/microsoft-edge
-          - name: Chrome (Linux)
-            os: ubuntu-latest
-            path: /usr/bin/google-chrome
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

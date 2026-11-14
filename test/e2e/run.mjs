@@ -214,23 +214,39 @@ async function main() {
     );
 
     const findTarget = async (pred) => (await listTargets(port)).find(pred);
-    const swTarget = () =>
-      findTarget((t) => t.type === 'service_worker' && t.url.startsWith('chrome-extension://') && t.url.endsWith('/background.js'));
+
+    // Find Zelium's worker by name: browsers ship their own component extensions
+    // (e.g. Chrome's "Gemini in Chrome") that also run a background.js worker.
+    async function findZeliumWorker() {
+      const workers = (await listTargets(port)).filter((t) => t.type === 'service_worker' && t.url.startsWith('chrome-extension://'));
+      for (const t of workers) {
+        const conn = connect(t.webSocketDebuggerUrl);
+        try {
+          const name = await conn.evaluate(`typeof chrome !== 'undefined' && chrome.runtime?.getManifest?.().name`);
+          if (name === 'Zelium') return { t, conn };
+        } catch {
+          /* not ready / not ours */
+        }
+        conn.close();
+      }
+      return null;
+    }
 
     let sw;
     let extId;
     await test('extension loads (service worker running)', async () => {
-      const t = await waitFor(swTarget, { timeout: 15000, message: 'Zelium service worker' });
-      extId = new URL(t.url).host;
-      sw = connect(t.webSocketDebuggerUrl);
-      // The worker can be listed before its script has run: wait for the extension APIs.
-      const name = await waitFor(() => sw.evaluate(`typeof chrome !== 'undefined' && chrome.runtime?.getManifest?.().name`), {
-        timeout: 15000,
-        message: 'extension APIs in service worker',
+      const found = await waitFor(findZeliumWorker, {
+        timeout: 20000,
+        message: 'Zelium service worker — the browser may block --load-extension (branded Chrome 137+ does)',
       });
-      assert(name === 'Zelium', `unexpected extension ${name}`);
+      sw = found.conn;
+      extId = new URL(found.t.url).host;
     });
-    if (!sw) throw new Error('Extension did not load; aborting.');
+    if (!sw) {
+      cleanup();
+      console.log('\nExtension did not load; skipping the remaining tests.');
+      process.exit(1);
+    }
 
     const swEval = (expr) => sw.evaluate(`(async () => { ${expr} })()`);
     // Tabs are tracked by id: browsers rewrite internal URLs (Edge: chrome:// → edge://).
@@ -326,6 +342,7 @@ async function main() {
     });
 
     await test('keystrokes do not leak to the page', async () => {
+      assert(await a.palette('p && p.isOpen'), 'palette not open');
       await a.evaluate('window.__keys = 0; window.__keyLog = []');
       await press(a, 'ArrowDown');
       await press(a, 'ArrowUp');
