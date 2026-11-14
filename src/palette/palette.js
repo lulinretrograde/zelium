@@ -7,9 +7,10 @@
   const Z = (globalThis.Zelium ??= {});
   const { fuzzy: F, parse: P, icons: I, commands: C } = Z;
 
-  const IS_MAC = /mac/i.test(navigator.userAgentData?.platform ?? navigator.platform ?? '');
+  // macOS uses ⌘; Windows, Linux and ChromeOS use Ctrl.
+  const IS_MAC = /mac/i.test(navigator.userAgentData?.platform || navigator.platform || '');
   const MOD = IS_MAC ? '⌘' : 'Ctrl+';
-  const REMOVE_KEYS = IS_MAC ? '⌘⌫' : 'Ctrl⇧⌫';
+  const REMOVE_KEYS = IS_MAC ? '⌘⌫' : 'Ctrl+⇧⌫';
 
   const MODES = {
     all: { prefix: '', label: '', placeholder: 'Search tabs, bookmarks, history or the web…' },
@@ -34,15 +35,19 @@
   // helpers
   // -------------------------------------------------------------------------
 
+  // Always create elements in the XHTML namespace: in XML documents (e.g. the
+  // browser's XML viewer) plain createElement would make namespace-less nodes.
+  const XHTML = 'http://www.w3.org/1999/xhtml';
+
   function h(tag, cls, text) {
-    const el = document.createElement(tag);
+    const el = document.createElementNS(XHTML, tag);
     if (cls) el.className = cls;
     if (text != null) el.textContent = text;
     return el;
   }
 
   function faviconUrl(pageUrl) {
-    const u = new URL(chrome.runtime.getURL('/_favicon/'));
+    const u = new URL(chrome.runtime.getURL('_favicon/'));
     u.searchParams.set('pageUrl', pageUrl);
     u.searchParams.set('size', '32');
     return u.toString();
@@ -765,6 +770,8 @@
         img.width = 16;
         img.height = 16;
         img.decoding = 'async';
+        // _favicon needs Chromium 104+; older builds/forks get a vector icon.
+        img.addEventListener('error', () => img.replaceWith(I.icon(row.icon || 'globe')), { once: true });
         img.src = faviconUrl(row.fav);
         icon.append(img);
       } else {

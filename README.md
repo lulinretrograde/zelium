@@ -1,6 +1,6 @@
 # Zelium
 
-A Zed-style command palette for the [Helium](https://helium.computer) browser (and any Chromium browser).
+A Zed-style command palette for [Helium](https://helium.computer) and every other Chromium browser, on macOS, Windows, Linux and ChromeOS.
 Press **⌘K** and a sharp, dark palette opens in the middle of the screen. From one input you can search
 your open tabs, bookmarks, history and recently closed tabs, run browser commands, do quick maths or
 search the web.
@@ -38,12 +38,45 @@ search the web.
   PDFs), Zelium opens the same palette in a small centred popup window instead.
 - **Private by design.** No network requests, no analytics, no dependencies. Everything stays local.
 
+## Compatibility
+
+Zelium uses only standard Manifest V3 extension APIs, so it runs in any Chromium-based browser from
+version 102 on:
+
+| Browser | Status |
+| --- | --- |
+| Helium | ✅ e2e suite passes (macOS) |
+| Chrome for Testing (≈ Chrome / Chromium) | ✅ e2e suite runs in CI on Linux, Windows, macOS |
+| Microsoft Edge, Google Chrome (branded) | CI runs the suite too, but non-blocking (branded builds may block `--load-extension`) |
+| Brave, Vivaldi, Opera, Arc, ungoogled-chromium, Thorium, … | should work: standard MV3 only, but not tested automatically |
+
+Every push runs a real-browser end-to-end suite on **Linux, Windows and macOS** (see
+[`test/e2e/run.mjs`](test/e2e/run.mjs)). It covers opening the palette, fuzzy search, keyboard
+handling, commands, bangs, the calculator, hostile page CSS, RTL pages, XML/SVG files, and the
+fallback window.
+
+Browser-specific details are handled automatically:
+
+- **Shortcut:** <kbd>⌘K</kbd> on macOS, <kbd>Ctrl+K</kbd> on Windows/Linux/ChromeOS. If another
+  extension already uses it, the browser leaves Zelium without a shortcut. The welcome page (also
+  available as Zelium's *Options*) detects this and links to the browser's shortcut settings. The
+  toolbar button always works too.
+- **Browser pages** (`chrome://`, `edge://`, `brave://`, `opera://`, `vivaldi://`, new tab pages,
+  extension stores): Zelium opens its own small window. If a browser doesn't allow popup windows, it
+  falls back to a tab.
+- **Web search** uses the browser's default engine (`chrome.search`). Browsers without that API fall
+  back to DuckDuckGo.
+- **Favicons** use the built-in favicon service where it exists (104+), and vector icons otherwise.
+- **Recently used tabs** use `tab.lastAccessed` (121+), and Zelium tracks this itself on older builds.
+- **Fonts:** the theme picks the best monospace font each OS ships with (SF Mono / Menlo, Cascadia /
+  Consolas, DejaVu / Liberation / Noto / Ubuntu Mono).
+
 ## Keys
 
 | Key | Action |
 | --- | --- |
 | <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> | open / close the palette |
-| <kbd>↑</kbd> <kbd>↓</kbd> · <kbd>Ctrl+N</kbd> <kbd>Ctrl+P</kbd> · <kbd>Ctrl+J</kbd> <kbd>Ctrl+K</kbd> | move the selection |
+| <kbd>↑</kbd> <kbd>↓</kbd> · <kbd>Ctrl+J</kbd> <kbd>Ctrl+P</kbd> (macOS also <kbd>Ctrl+N</kbd> <kbd>Ctrl+K</kbd>) | move the selection |
 | <kbd>PgUp</kbd> <kbd>PgDn</kbd> | jump 8 rows |
 | <kbd>↵</kbd> | open / switch / run |
 | <kbd>⌘↵</kbd> / <kbd>Ctrl+↵</kbd> | open in a new tab |
@@ -55,18 +88,20 @@ search the web.
 
 Middle-click a row to open it in a new tab.
 
-To change the shortcut, run `> Change Zelium Shortcut` or go to `chrome://extensions/shortcuts`.
+To change the shortcut, run `> Change Zelium Shortcut`, open Zelium's options, or go to
+`chrome://extensions/shortcuts`. Every Chromium browser redirects that address to its own page
+(`edge://`, `brave://`, …).
 
 ## Install
 
 Zelium isn't on a store yet, so load it unpacked:
 
-1. Clone this repo.
-2. In Helium, open `chrome://extensions` and turn on **Developer mode** (top right).
-3. Click **Load unpacked** and pick the **`src/`** folder.
-4. Press **⌘K** on any page.
-
-If ⌘K does nothing, another extension may already use it. Set a key at `chrome://extensions/shortcuts`.
+1. Clone this repo, or download `zelium-<version>.zip` from the CI artifacts and unzip it.
+2. Open the extensions page: `chrome://extensions` (works in every Chromium browser; Edge also
+   accepts `edge://extensions`, Opera `opera://extensions`).
+3. Turn on **Developer mode**.
+4. Click **Load unpacked** and pick the **`src/`** folder (or the unzipped folder).
+5. A welcome page opens and shows your shortcut. Press it on any page.
 
 ## How it works
 
@@ -76,6 +111,7 @@ src/
 ├── background.js        service worker: shortcut, data (tabs/bookmarks/history/sessions), actions
 ├── content.js           mounts the palette in a closed shadow root + top-layer popover
 ├── fallback.html/.js    popup window used on pages that can't be scripted
+├── welcome.html/.css/.js  welcome + options page (shows/fixes the shortcut)
 └── palette/
     ├── palette.js       UI: modes, ranking, rendering, keyboard handling
     ├── palette.css      Zed One Dark theme
@@ -111,12 +147,15 @@ No build step is needed. Edit the files in `src/`, then click the reload icon on
 
 ```bash
 npm test          # unit tests (fuzzy matcher, parser, calculator, bangs)
+npm run e2e       # real-browser tests (auto-detects an installed Chromium browser;
+                  #   CHROME_PATH=… to choose one, ZELIUM_DOWNLOAD_CHROME=1 to fetch
+                  #   Chrome for Testing, HEADLESS=0 to watch)
 npm run check     # syntax-check all JS + verify manifest references
 npm run build     # check + zip src/ into dist/zelium-<version>.zip
 npm run icons     # regenerate src/icons/*.png
 ```
 
-Requires Node ≥ 20 for the scripts. The extension itself has no dependencies.
+Requires Node ≥ 22 for the scripts. The extension itself has no dependencies.
 
 ## Theme
 

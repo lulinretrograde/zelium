@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Zelium</title>
+    <link rel="icon" href="icons/icon32.png" />
+    <link rel="stylesheet" href="welcome.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="icons/icon48.png" width="32" height="32" alt="" />
+        <h1>Zelium</h1>
+        <span class="version" id="version"></span>
+      </header>
+
+      <section class="card" id="shortcut-card">
+        <div class="label">Shortcut</div>
+        <div class="shortcut-row">
+          <kbd class="big" id="shortcut">…</kbd>
+          <button id="try" type="button">Try it</button>
+          <button id="change" type="button" class="ghost">Change shortcut</button>
+        </div>
+        <p class="warn" id="unassigned" hidden>
+          No shortcut is assigned. Another extension probably already uses it. Click
+          <strong>Change shortcut</strong> to pick one, or use the Zelium toolbar button.
+        </p>
+        <p class="muted" id="browser"></p>
+      </section>
+
+      <section class="card">
+        <div class="label">Modes</div>
+        <table>
+          <tr><td><kbd>@</kbd></td><td>open tabs</td></tr>
+          <tr><td><kbd>#</kbd></td><td>bookmarks</td></tr>
+          <tr><td><kbd>/</kbd></td><td>history</td></tr>
+          <tr><td><kbd>&gt;</kbd></td><td>commands</td></tr>
+          <tr><td><kbd>!yt</kbd> <span class="muted">query</span></td><td>site search (type <kbd>!</kbd> for the list)</td></tr>
+          <tr><td><kbd>2*(3+4)</kbd></td><td>calculator, <kbd>↵</kbd> copies</td></tr>
+        </table>
+      </section>
+
+      <section class="card">
+        <div class="label">Keys</div>
+        <table>
+          <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>move</td></tr>
+          <tr><td><kbd>↵</kbd></td><td>open / switch / run</td></tr>
+          <tr><td><kbd data-mod>⌘</kbd><kbd>↵</kbd></td><td>open in new tab</td></tr>
+          <tr><td><kbd>⇧</kbd><kbd>↵</kbd></td><td>open in new window</td></tr>
+          <tr><td id="remove-keys"></td><td>close tab / forget history entry</td></tr>
+          <tr><td><kbd>Tab</kbd></td><td>next mode</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>close</td></tr>
+        </table>
+      </section>
+
+      <footer class="muted">
+        Works on any page. On browser pages (settings, new tab, extension stores) the palette opens in a
+        small window instead.
+      </footer>
+    </main>
+    <script src="welcome.js"></script>
+  </body>
+</html>

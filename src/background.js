@@ -19,9 +19,17 @@ const PALETTE_FILES = [
   'content.js',
 ];
 
-const RESTRICTED_SCHEMES =
-  /^(chrome|chrome-extension|chrome-search|chrome-untrusted|devtools|edge|brave|helium|view-source|about|data|javascript|file):/i;
-const RESTRICTED_HOSTS = ['chromewebstore.google.com', 'chrome.google.com'];
+// Only ordinary web pages can be scripted. Every browser-internal scheme
+// (chrome:, edge:, brave:, opera:, vivaldi:, arc:, helium:, about:, …) gets the
+// fallback window instead — this list doesn't need to know them all.
+const SCRIPTABLE_SCHEMES = /^(https?|file|ftp):/i;
+// Extension stores block content scripts in every Chromium browser.
+const RESTRICTED_HOSTS = [
+  'chromewebstore.google.com',
+  'chrome.google.com',
+  'microsoftedge.microsoft.com',
+  'addons.opera.com',
+];
 
 const HISTORY_SNAPSHOT_SIZE = 1000;
 const HISTORY_QUERY_SIZE = 150;
@@ -37,13 +45,71 @@ chrome.commands.onCommand.addListener((command, tab) => {
 
 chrome.action.onClicked.addListener((tab) => togglePalette(tab));
 
+// ---------------------------------------------------------------------------
+// Install / startup: show the real shortcut (it differs per OS and may be
+// unassigned if another extension already took it).
+// ---------------------------------------------------------------------------
+
+async function getShortcut() {
+  try {
+    const cmds = await chrome.commands.getAll();
+    return cmds.find((c) => c.name === 'toggle-palette')?.shortcut || '';
+  } catch {
+    return '';
+  }
+}
+
+async function refreshActionTitle() {
+  const shortcut = await getShortcut();
+  try {
+    await chrome.action.setTitle({ title: shortcut ? `Zelium (${shortcut})` : 'Zelium — click to open, or set a shortcut' });
+  } catch {
+    /* ignore */
+  }
+}
+
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  await refreshActionTitle();
+  if (reason === 'install') {
+    await chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') });
+  }
+});
+
+chrome.runtime.onStartup?.addListener(refreshActionTitle);
+
+// ---------------------------------------------------------------------------
+// Most-recently-used tab tracking. Chromium 121+ exposes tab.lastAccessed;
+// older builds and some forks don't, so keep our own record as a fallback.
+// ---------------------------------------------------------------------------
+
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  try {
+    const { mru = {} } = await chrome.storage.session.get('mru');
+    mru[tabId] = Date.now();
+    await chrome.storage.session.set({ mru });
+  } catch {
+    /* ignore */
+  }
+});
+
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  try {
+    const { mru = {} } = await chrome.storage.session.get('mru');
+    if (tabId in mru) {
+      delete mru[tabId];
+      await chrome.storage.session.set({ mru });
+    }
+  } catch {
+    /* ignore */
+  }
+});
+
 chrome.windows.onRemoved.addListener(async (windowId) => {
   if ((await getFallbackWindowId()) === windowId) await setFallbackWindowId(null);
 });
 
 function isRestricted(url) {
-  if (!url) return true;
-  if (RESTRICTED_SCHEMES.test(url)) return true;
+  if (!url || !SCRIPTABLE_SCHEMES.test(url)) return true;
   try {
     const { hostname } = new URL(url);
     return RESTRICTED_HOSTS.includes(hostname);
@@ -116,8 +182,20 @@ async function openFallbackWindow(tab) {
   } catch {
     /* let the browser place it */
   }
-  const url = chrome.runtime.getURL(`fallback.html?tab=${tab.id}`);
-  const win = await chrome.windows.create({ url, type: 'popup', width, height, left, top, focused: true });
+  const url = chrome.runtime.getURL(`fallback.html?tab=${tab?.id ?? ''}`);
+  let win;
+  try {
+    win = await chrome.windows.create({ url, type: 'popup', width, height, left, top, focused: true });
+  } catch {
+    // Some browsers (or positions off-screen on multi-monitor setups) reject
+    // the geometry or popup windows entirely: retry plainly, then as a tab.
+    try {
+      win = await chrome.windows.create({ url, type: 'popup', width, height, focused: true });
+    } catch {
+      await chrome.tabs.create({ url, windowId: tab?.windowId });
+      return;
+    }
+  }
   await setFallbackWindowId(win.id);
   // Some builds/launch flags ignore the size on create; enforce it.
   if (win.width !== width || win.height !== height) {
@@ -136,6 +214,18 @@ async function openFallbackWindow(tab) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (typeof msg?.type !== 'string' || !msg.type.startsWith('zelium:')) return false;
   if (msg.type === 'zelium:toggle') return false; // handled by content scripts
+  if (msg.type === 'zelium:openPalette') {
+    // From the welcome page's "Try it" button or a page the overlay can't mount on.
+    (msg.forceFallback ? openFallbackWindow(sender.tab) : togglePalette(sender.tab)).then(
+      () => sendResponse({ ok: true }),
+      (err) => sendResponse({ ok: false, error: String(err?.message ?? err) }),
+    );
+    return true;
+  }
+  if (msg.type === 'zelium:shortcut') {
+    getShortcut().then((shortcut) => sendResponse({ ok: true, data: shortcut }));
+    return true;
+  }
   handle(msg, sender).then(
     (data) => sendResponse({ ok: true, data }),
     (err) => sendResponse({ ok: false, error: String(err?.message ?? err) }),
@@ -261,12 +351,13 @@ function slimHistory(h) {
 
 async function snapshot(ctx) {
   const ownOrigin = chrome.runtime.getURL('');
-  const [tabs, tree, history, closed, windows] = await Promise.all([
+  const [tabs, tree, history, closed, windows, { mru = {} }] = await Promise.all([
     chrome.tabs.query({}),
     chrome.bookmarks.getTree(),
     chrome.history.search({ text: '', startTime: 0, maxResults: HISTORY_SNAPSHOT_SIZE }),
     chrome.sessions.getRecentlyClosed({ maxResults: 10 }),
     chrome.windows.getAll({ windowTypes: ['normal'] }),
+    chrome.storage.session.get('mru').catch(() => ({})),
   ]);
 
   const closedEntries = [];
@@ -293,7 +384,13 @@ async function snapshot(ctx) {
   return {
     current: ctx ? slimTab(ctx) : null,
     windowCount: windows.length,
-    tabs: tabs.filter((t) => !(t.url || '').startsWith(ownOrigin)).map(slimTab),
+    tabs: tabs
+      .filter((t) => !(t.url || '').startsWith(ownOrigin))
+      .map((t) => {
+        const slim = slimTab(t);
+        if (!slim.lastAccessed) slim.lastAccessed = mru[t.id] ?? (t.active ? Date.now() - 1 : 0);
+        return slim;
+      }),
     bookmarks: flattenBookmarks(tree),
     history: history.map(slimHistory),
     closed: closedEntries,
@@ -341,17 +438,25 @@ async function openUrl(url, disposition = 'current', ctx) {
 
 async function webSearch(text, disposition = 'current', ctx) {
   if (chrome.search?.query) {
-    const map = { current: 'CURRENT_TAB', newTab: 'NEW_TAB', newWindow: 'NEW_WINDOW' };
-    const opts = { text, disposition: map[disposition] ?? 'CURRENT_TAB' };
-    if (opts.disposition === 'CURRENT_TAB') {
-      if (ctx?.id == null) opts.disposition = 'NEW_TAB';
-      else opts.tabId = ctx.id;
+    try {
+      return await searchWithDefaultEngine(text, disposition, ctx);
+    } catch {
+      /* some forks stub the API out — fall through */
     }
-    await chrome.search.query(opts);
-    return true;
   }
-  // Very old / stripped builds without chrome.search: fall back to DuckDuckGo.
+  // Builds without a working chrome.search: fall back to DuckDuckGo.
   return openUrl(`https://duckduckgo.com/?q=${encodeURIComponent(text)}`, disposition, ctx);
+}
+
+async function searchWithDefaultEngine(text, disposition, ctx) {
+  const map = { current: 'CURRENT_TAB', newTab: 'NEW_TAB', newWindow: 'NEW_WINDOW' };
+  const opts = { text, disposition: map[disposition] ?? 'CURRENT_TAB' };
+  if (opts.disposition === 'CURRENT_TAB') {
+    if (ctx?.id == null) opts.disposition = 'NEW_TAB';
+    else opts.tabId = ctx.id;
+  }
+  await chrome.search.query(opts);
+  return true;
 }
 
 async function windowTabs(ctx) {

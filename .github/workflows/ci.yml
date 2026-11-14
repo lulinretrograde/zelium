@@ -4,9 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
-  test:
+  unit:
+    name: Unit tests + build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,3 +22,49 @@ jobs:
         with:
           name: zelium
           path: dist/*.zip
+
+  e2e:
+    name: E2E · Chrome for Testing · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run browser tests
+        run: node test/e2e/run.mjs
+        env:
+          ZELIUM_DOWNLOAD_CHROME: '1'
+
+  e2e-browsers:
+    # Other preinstalled Chromium browsers. Branded builds may refuse
+    # --load-extension, so these are informative rather than required.
+    name: E2E · ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Edge (Windows)
+            os: windows-latest
+            path: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+          - name: Edge (Linux)
+            os: ubuntu-latest
+            path: /usr/bin/microsoft-edge
+          - name: Chrome (Linux)
+            os: ubuntu-latest
+            path: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run browser tests
+        run: node test/e2e/run.mjs
+        env:
+          CHROME_PATH: ${{ matrix.path }}

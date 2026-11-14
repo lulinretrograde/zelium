@@ -27,7 +27,7 @@
     { id: 'session.reopen', title: 'Reopen Closed Tab', keywords: 'undo restore', icon: 'restore', group: 'Tab' },
 
     { id: 'window.new', title: 'New Window', keywords: 'open', icon: 'window', group: 'Window' },
-    { id: 'window.incognito', title: 'New Incognito Window', keywords: 'private', icon: 'incognito', group: 'Window' },
+    { id: 'window.incognito', title: 'New Private Window', keywords: 'incognito inprivate private', icon: 'incognito', group: 'Window' },
 
     { id: 'zoom.in', title: 'Zoom In', keywords: 'bigger larger', icon: 'zoomIn', group: 'View' },
     { id: 'zoom.out', title: 'Zoom Out', keywords: 'smaller', icon: 'zoomOut', group: 'View' },

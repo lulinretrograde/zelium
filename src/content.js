@@ -9,10 +9,17 @@
   const Z = globalThis.Zelium;
   const TAG = 'zelium-palette';
 
+  // Raw XML/SVG documents, or documents without a root, can't host the overlay:
+  // hand over to the fallback window instead.
+  if (!(document.documentElement instanceof HTMLElement) || typeof Element.prototype.attachShadow !== 'function') {
+    chrome.runtime.sendMessage({ type: 'zelium:openPalette', forceFallback: true });
+    return;
+  }
+
   // Remove a stale host left behind by a previous (reloaded/updated) extension instance.
   document.querySelectorAll(TAG).forEach((el) => el.remove());
 
-  const host = document.createElement(TAG);
+  const host = document.createElementNS('http://www.w3.org/1999/xhtml', TAG);
   host.style.cssText = [
     'all: initial !important',
     'position: fixed !important',
@@ -89,6 +96,16 @@
     }
     previousFocus = null;
   }
+
+  // Test hook. Lives only in the extension's isolated world, never visible to the page.
+  Z.instance = {
+    get palette() {
+      return palette;
+    },
+    get visible() {
+      return visible;
+    },
+  };
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type !== 'zelium:toggle') return false;

@@ -15,7 +15,12 @@
   --z-hover: #363c46;
   --z-selected: #454a56;
   --z-backdrop: rgba(14, 15, 18, 0.45);
-  --z-font: 'Zed Plex Mono', 'IBM Plex Mono', 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  /* Zed's font first, then the best monospace each OS ships with:
+     macOS (SF Mono, Menlo), Windows (Cascadia, Consolas), Linux/ChromeOS
+     (DejaVu, Liberation, Noto, Ubuntu). */
+  --z-font: 'Zed Plex Mono', 'IBM Plex Mono', 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, 'Cascadia Mono',
+    'Cascadia Code', Consolas, 'DejaVu Sans Mono', 'Liberation Mono', 'Noto Sans Mono', 'Ubuntu Mono', 'Roboto Mono',
+    monospace;
 
   position: fixed;
   inset: 0;
@@ -26,6 +31,8 @@
   line-height: 1.4;
   letter-spacing: normal;
   text-align: left;
+  direction: ltr;
+  writing-mode: horizontal-tb;
   text-transform: none;
   color: var(--z-text);
   -webkit-font-smoothing: antialiased;
