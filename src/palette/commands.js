@@ -2,6 +2,7 @@
  * Command definitions shown in ">" mode.
  *  - `local: true` commands run in the palette (clipboard); the rest are sent
  *    to the background worker by id.
+ *  - `url` commands open that page (new tab by default; ⇧↵ new window).
  *  - `title` may be a function of the current tab for toggles.
  */
 (() => {
@@ -25,6 +26,12 @@
     { id: 'tab.toWindow', title: 'Move Tab to New Window', keywords: 'detach pop out', icon: 'moveWindow', group: 'Tab' },
     { id: 'tab.sortByDomain', title: 'Sort Tabs by Domain', keywords: 'organize order arrange', icon: 'sort', group: 'Tab' },
     { id: 'session.reopen', title: 'Reopen Closed Tab', keywords: 'undo restore', icon: 'restore', group: 'Tab' },
+
+    { id: 'ai.claude', title: 'New Claude Chat', keywords: 'ai anthropic assistant llm', icon: 'sparkle', url: 'https://claude.ai/new', group: 'AI' },
+    { id: 'ai.chatgpt', title: 'New ChatGPT Chat', keywords: 'ai openai gpt assistant llm', icon: 'sparkle', url: 'https://chatgpt.com/', group: 'AI' },
+    { id: 'ai.gemini', title: 'New Gemini Chat', keywords: 'ai google bard assistant llm', icon: 'sparkle', url: 'https://gemini.google.com/app', group: 'AI' },
+    { id: 'ai.deepseek', title: 'New DeepSeek Chat', keywords: 'ai assistant llm', icon: 'sparkle', url: 'https://chat.deepseek.com/', group: 'AI' },
+    { id: 'ai.kimi', title: 'New Kimi Chat', keywords: 'ai moonshot assistant llm', icon: 'sparkle', url: 'https://www.kimi.com/', group: 'AI' },
 
     { id: 'window.new', title: 'New Window', keywords: 'open', icon: 'window', group: 'Window' },
     { id: 'window.incognito', title: 'New Private Window', keywords: 'incognito inprivate private', icon: 'incognito', group: 'Window' },

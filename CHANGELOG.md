@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 — 2026-11-14
+
+- **New AI chat commands:** *New Claude Chat*, *New ChatGPT Chat*, *New Gemini Chat*,
+  *New DeepSeek Chat* and *New Kimi Chat* open a fresh chat in a new tab (<kbd>⇧↵</kbd> for a new
+  window). Find them with `>claude`, `>gpt`, or just type the name in the main search.
+
 ## 0.3.0 — 2026-11-14
 
 - **Helium's bangs:** the full list Helium uses natively (Kagi bangs + Helium extras: 10,735 sites,

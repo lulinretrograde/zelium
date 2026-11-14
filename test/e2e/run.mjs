@@ -380,6 +380,21 @@ async function main() {
       await swEval(`await chrome.tabs.update(${tabIds.a}, { pinned: false })`);
     });
 
+    await test('> AI command opens a new Claude chat in a new tab', async () => {
+      await a.send('Page.bringToFront');
+      await openOn('a', a);
+      await a.send('Input.insertText', { text: '>claude' });
+      await waitFor(() => a.palette(`p.rows[0]?.data?.id === 'ai.claude'`), { message: 'Claude row' });
+      await press(a, 'Enter');
+      const id = await waitFor(
+        () => swEval(`return (await chrome.tabs.query({})).find((t) => (t.pendingUrl || t.url || '').startsWith('https://claude.ai/new'))?.id`),
+        { message: 'claude.ai tab' },
+      );
+      const still = await getTab('a');
+      assert(still.url.startsWith('http://127.0.0.1'), `current tab navigated away: ${still.url}`);
+      await swEval(`await chrome.tabs.remove(${id})`);
+    });
+
     await test('!bangs: full Helium list loads on demand', async () => {
       await a.send('Page.bringToFront');
       await openOn('a', a);

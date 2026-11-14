@@ -719,6 +719,7 @@
         key: `command:${cmd.id}`,
         kind: 'command',
         icon: cmd.icon,
+        fav: cmd.url,
         title: cmd.title,
         titleHl: hl?.[0],
         meta: cmd.group,
@@ -822,6 +823,9 @@
           await this.copyAndClose(row.data.display, `Copied ${row.data.display}`);
           return;
         case 'command':
+          if (row.data.url) {
+            return this.dispatch('open', { url: row.data.url, disposition: disposition === 'current' ? 'newTab' : disposition });
+          }
           if (row.data.local) {
             await this.runLocalCommand(row.data.id);
             return;

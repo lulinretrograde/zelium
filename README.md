@@ -38,6 +38,7 @@ search the web.
   - new, close, duplicate, pin or mute a tab; close other tabs, tabs to the right, or duplicates
   - reload or hard reload; move a tab to a new window; sort tabs by domain; reopen a closed tab
   - new window or incognito window; zoom in, out or reset
+  - start a new Claude, ChatGPT, Gemini, DeepSeek or Kimi chat (opens in a new tab)
   - open History, Downloads, Bookmarks, Extensions, Settings or the shortcut settings
 - **With an empty input** the palette shows your most recently used tabs and recently closed tabs.
 - **Works everywhere.** On pages extensions can't touch (`chrome://`, the new tab page, the Web Store,
