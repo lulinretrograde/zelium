@@ -1,5 +1,7 @@
 # Zelium
 
+[![CI](https://github.com/lulinretrograde/zelium/actions/workflows/ci.yml/badge.svg)](https://github.com/lulinretrograde/zelium/actions/workflows/ci.yml)
+
 A Zed-style command palette for [Helium](https://helium.computer) and every other Chromium browser, on macOS, Windows, Linux and ChromeOS.
 Press **⌘K** (macOS) or **Alt+K** (Windows/Linux/ChromeOS) and a sharp, dark palette opens in the middle of the screen. From one input you can search
 your open tabs, bookmarks, history and recently closed tabs, run browser commands, do quick maths or
@@ -43,12 +45,13 @@ search the web.
 Zelium uses only standard Manifest V3 extension APIs, so it runs in any Chromium-based browser from
 version 102 on:
 
-| Browser | Status |
-| --- | --- |
-| Helium | ✅ e2e suite passes (macOS) |
-| Chrome for Testing (≈ Chrome / Chromium) | ✅ e2e suite runs in CI on Linux, Windows, macOS |
-| Microsoft Edge, Google Chrome (branded) | CI runs the suite too, but non-blocking (branded builds may block `--load-extension`) |
-| Brave, Vivaldi, Opera, Arc, ungoogled-chromium, Thorium, … | should work: standard MV3 only, but not tested automatically |
+| Browser | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| Chrome for Testing (= Chrome / Chromium engine) | ✅ CI | ✅ CI | ✅ CI |
+| Microsoft Edge | — | ✅ CI | ✅ CI |
+| Helium | ✅ local e2e | — | — |
+| Google Chrome (branded) | same engine as above; Chrome 137+ blocks loading test extensions from the command line, so it can't run in CI | | |
+| Brave, Vivaldi, Opera, Arc, ungoogled-chromium, Thorium, … | should work (standard MV3 only), not tested automatically | | |
 
 Every push runs a real-browser end-to-end suite on **Linux, Windows and macOS** (see
 [`test/e2e/run.mjs`](test/e2e/run.mjs)). It covers opening the palette, fuzzy search, keyboard
