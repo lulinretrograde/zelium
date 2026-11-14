@@ -335,10 +335,12 @@ async function main() {
       // Re-open so the snapshot includes tab B.
       await closeOn(a);
       await openOn('a', a);
-      await waitFor(() => a.palette('p.snapshot.tabs.length >= 2'), { message: 'snapshot' });
+      // The palette shows the previous snapshot instantly, then refreshes: wait for fresh data.
+      await waitFor(() => a.palette(`p.snapshot.tabs.some((t) => t.title === 'Beta Docs')`), { message: 'fresh snapshot' });
       await a.send('Input.insertText', { text: 'beta dcs' });
-      const first = await waitFor(() => a.palette(`p.rows[0] && p.rows[0].title`), { message: 'results' });
-      assert(first === 'Beta Docs', `first result was ${first}`);
+      await waitFor(() => a.palette(`p.rows[0]?.title === 'Beta Docs' && p.rows[0].kind === 'tab'`), {
+        message: 'Beta Docs as first result',
+      });
     });
 
     await test('keystrokes do not leak to the page', async () => {
