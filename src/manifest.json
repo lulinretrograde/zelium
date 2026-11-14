@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "Zelium",
+  "short_name": "Zelium",
+  "version": "0.1.0",
+  "description": "A Zed-style command palette for Helium: search tabs, bookmarks, history, commands and the web from one box.",
+  "minimum_chrome_version": "121",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Zelium (⌘K)",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "toggle-palette": {
+      "suggested_key": {
+        "default": "Ctrl+K",
+        "mac": "Command+K"
+      },
+      "description": "Open / close the Zelium palette"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs",
+    "history",
+    "bookmarks",
+    "sessions",
+    "search",
+    "storage",
+    "favicon"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["palette/palette.css", "_favicon/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

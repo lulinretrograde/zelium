@@ -1,0 +1,16 @@
+{
+  "name": "zelium",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Zed-style command palette extension for the Helium browser.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/",
+    "check": "node scripts/check.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "build": "node scripts/check.mjs && node scripts/build.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
