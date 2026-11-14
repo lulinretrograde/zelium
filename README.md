@@ -30,6 +30,10 @@ search the web.
   - A bang with no query (`!w` then <kbd>↵</kbd>) opens the site itself.
   - AI bangs are labelled. The list ships with the extension and loads the first time you type `!`,
     so there are no network requests. Run `npm run bangs` to refresh it.
+- **Ask an AI:** type `claude <message>`, `gpt <message>`, `gemini …`, `deepseek …` or `kimi …`
+  and press <kbd>↵</kbd>. Zelium opens a new chat, types the message in and sends it. Or pick
+  *New Claude Chat* (etc.) and press <kbd>Tab</kbd> to write the message. You need to be signed in to
+  the service; if Zelium can't find the message box (a sign-in page, or the site changed its layout), the new chat just stays open.
 - **Calculator:** `2*(3+4)`, `sqrt(2)^2`, `2*pi`. <kbd>↵</kbd> copies the result.
 - **Direct URLs:** `github.com`, `localhost:3000`, `192.168.1.1` open straight away.
 - **Web search** goes through **your browser's default search engine**.
@@ -93,7 +97,7 @@ Browser-specific details are handled automatically:
 | <kbd>⇧↵</kbd> | open in a new window (or move the selected tab to one) |
 | <kbd>⌘⌫</kbd> / <kbd>Ctrl+⇧+⌫</kbd> | close the selected tab, or remove the selected history entry |
 | <kbd>⌘C</kbd> (no text selected) | copy the selected row's URL |
-| <kbd>Tab</kbd> / <kbd>⇧Tab</kbd> | next / previous mode (or complete a `!bang`) |
+| <kbd>Tab</kbd> / <kbd>⇧Tab</kbd> | next / previous mode (or complete a `!bang`, or start a message on an AI chat command) |
 | <kbd>Esc</kbd> | close |
 
 Middle-click a row to open it in a new tab.
@@ -151,6 +155,7 @@ src/
 | `search` | search with your default engine |
 | `favicon` | show site icons |
 | `storage` | remember the fallback window between service-worker restarts |
+| `claude.ai`, `chatgpt.com`, `gemini.google.com`, `chat.deepseek.com`, `kimi.com` | type and send your message in a new AI chat (only in the tab Zelium just opened, and only when you used *Ask …*) |
 
 ## Development
 

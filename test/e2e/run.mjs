@@ -105,6 +105,34 @@ const PAGES = {
       document.addEventListener('keydown', (e) => { window.__keys++; window.__keyLog.push(e.key + '@' + (document.activeElement?.tagName) + ' host=' + !!document.querySelector('zelium-palette') + ' focus=' + document.hasFocus()); });
     </script>`,
   '/b.html': `<!doctype html><title>Beta Docs</title><h1>Beta</h1>`,
+  // Fake chat apps for the "ask AI" flow. chat.html: a contenteditable editor
+  // that appears late and renders input a frame later (like Lexical), with a
+  // send button that's disabled until there's text and a restored draft.
+  '/chat.html': `<!doctype html><title>Chat</title><main id="app"></main>
+    <script>
+      window.__sent = [];
+      setTimeout(() => {
+        const ed = document.createElement('div');
+        ed.contentEditable = 'true';
+        ed.setAttribute('role', 'textbox');
+        const btn = document.createElement('button');
+        btn.setAttribute('aria-label', 'Send message');
+        btn.disabled = true;
+        ed.addEventListener('input', () => requestAnimationFrame(() => (btn.disabled = !ed.innerText.trim())));
+        btn.addEventListener('click', () => { window.__sent.push(ed.innerText.trim()); ed.textContent = ''; btn.disabled = true; });
+        document.getElementById('app').append(ed, btn);
+        setTimeout(() => { if (!ed.innerText.trim()) ed.textContent = 'old draft'; }, 600);
+      }, 400);
+    </script>`,
+  // chat-ta.html: a plain textarea that sends on Enter, no button.
+  '/chat-ta.html': `<!doctype html><title>Chat TA</title><textarea id="chat-input"></textarea>
+    <script>
+      window.__sent = [];
+      const ta = document.getElementById('chat-input');
+      ta.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.__sent.push(ta.value.trim()); ta.value = ''; }
+      });
+    </script>`,
   '/rtl.html': `<!doctype html><html dir="rtl" lang="ar"><title>صفحة</title><body style="direction:rtl">مرحبا</body></html>`,
   '/data.xml': `<?xml version="1.0"?><root><item>xml</item></root>`,
   '/img.svg': `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="#74ade8"/></svg>`,
@@ -394,6 +422,38 @@ async function main() {
       assert(still.url.startsWith('http://127.0.0.1'), `current tab navigated away: ${still.url}`);
       await swEval(`await chrome.tabs.remove(${id})`);
     });
+
+    await test('"claude <message>" offers to ask Claude; Tab on the command starts one', async () => {
+      await closeOn(a);
+      await openOn('a', a);
+      await a.send('Input.insertText', { text: 'claude what is MV3' });
+      const row = await waitFor(() => a.palette(`p.rows[0]?.kind === 'ask' && p.rows[0]`), { message: 'ask row' });
+      assert(row.data.ai.id === 'ai.claude' && row.data.text === 'what is MV3', JSON.stringify(row.data));
+      await closeOn(a);
+      await openOn('a', a);
+      await a.send('Input.insertText', { text: '>gemini' });
+      await waitFor(() => a.palette(`p.rows[0]?.data?.id === 'ai.gemini'`), { message: 'Gemini row' });
+      await press(a, 'Tab');
+      const value = await waitFor(() => a.palette(`p.input.value === 'gemini ' && p.input.value`), { message: 'completed input' });
+      assert(value === 'gemini ', value);
+      await closeOn(a);
+    });
+
+    for (const [page, expected] of [
+      ['/chat.html', 'sent:button'],
+      ['/chat-ta.html', 'sent:enter'],
+    ]) {
+      await test(`ask AI: types the message and sends it (${page})`, async () => {
+        const result = await swEval(`return await openAiChat(${JSON.stringify(base + page)}, 'hello from zelium', 'newTab')`);
+        assert(result === expected, `result ${result}`);
+        const id = await swEval(`return (await chrome.tabs.query({})).find((t) => t.url === ${JSON.stringify(base + page)})?.id`);
+        const sent = await swEval(
+          `return (await chrome.scripting.executeScript({ target: { tabId: ${id} }, world: 'MAIN', func: () => window.__sent }))[0].result`,
+        );
+        assert(JSON.stringify(sent) === '["hello from zelium"]', `sent ${JSON.stringify(sent)}`);
+        await swEval(`await chrome.tabs.remove(${id})`);
+      });
+    }
 
     await test('!bangs: full Helium list loads on demand', async () => {
       await a.send('Page.bringToFront');

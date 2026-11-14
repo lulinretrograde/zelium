@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 — 2026-11-14
+
+- **Ask an AI from the palette:** `claude <message>`, `gpt <message>` (or `chatgpt`), `gemini …`,
+  `deepseek …`, `kimi …` opens a new chat, types the message and sends it. <kbd>Tab</kbd> on a
+  *New … Chat* command starts the message. <kbd>⇧↵</kbd> opens it in a new window.
+- New host permissions for those five sites, used only to type into the chat Zelium just opened.
+
 ## 0.4.0 — 2026-11-14
 
 - **New AI chat commands:** *New Claude Chat*, *New ChatGPT Chat*, *New Gemini Chat*,

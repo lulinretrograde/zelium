@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Zelium",
   "short_name": "Zelium",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "A Zed-style command palette for Helium and every Chromium browser: search tabs, bookmarks, history, commands and the web from one box.",
   "minimum_chrome_version": "102",
   "icons": {
@@ -44,6 +44,14 @@
     "search",
     "storage",
     "favicon"
+  ],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://chatgpt.com/*",
+    "https://gemini.google.com/*",
+    "https://chat.deepseek.com/*",
+    "https://www.kimi.com/*",
+    "https://kimi.com/*"
   ],
   "web_accessible_resources": [
     {

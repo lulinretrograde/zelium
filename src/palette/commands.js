@@ -3,10 +3,32 @@
  *  - `local: true` commands run in the palette (clipboard); the rest are sent
  *    to the background worker by id.
  *  - `url` commands open that page (new tab by default; ⇧↵ new window).
+ *  - `ai` commands also accept a message: Tab, type it, ↵ sends it.
  *  - `title` may be a function of the current tab for toggles.
  */
 (() => {
   const Z = (globalThis.Zelium ??= {});
+
+  /**
+   * AI chat services. Typing "<alias> <message>" (e.g. "claude what is MV3")
+   * offers to send the message in a new chat; aliases are matched whole-word.
+   */
+  const AI = [
+    { id: 'ai.claude', name: 'Claude', aliases: ['claude'], keywords: 'ai anthropic assistant llm', url: 'https://claude.ai/new' },
+    { id: 'ai.chatgpt', name: 'ChatGPT', aliases: ['chatgpt', 'gpt', 'cgpt'], keywords: 'ai openai assistant llm', url: 'https://chatgpt.com/' },
+    { id: 'ai.gemini', name: 'Gemini', aliases: ['gemini'], keywords: 'ai google bard assistant llm', url: 'https://gemini.google.com/app' },
+    { id: 'ai.deepseek', name: 'DeepSeek', aliases: ['deepseek'], keywords: 'ai assistant llm', url: 'https://chat.deepseek.com/' },
+    { id: 'ai.kimi', name: 'Kimi', aliases: ['kimi'], keywords: 'ai moonshot assistant llm', url: 'https://www.kimi.com/' },
+  ];
+
+  /** "claude how do bangs work" → { ai, text }; null unless an alias + message. */
+  function parseAsk(query) {
+    const m = /^\s*([a-z]+)[\s:]+(\S[\s\S]*)$/i.exec(query);
+    if (!m) return null;
+    const alias = m[1].toLowerCase();
+    const ai = AI.find((a) => a.aliases.includes(alias));
+    return ai ? { ai, text: m[2].trim() } : null;
+  }
 
   const COMMANDS = [
     { id: 'copy.url', title: 'Copy URL', keywords: 'link address clipboard', icon: 'copy', local: true, group: 'Copy' },
@@ -27,11 +49,15 @@
     { id: 'tab.sortByDomain', title: 'Sort Tabs by Domain', keywords: 'organize order arrange', icon: 'sort', group: 'Tab' },
     { id: 'session.reopen', title: 'Reopen Closed Tab', keywords: 'undo restore', icon: 'restore', group: 'Tab' },
 
-    { id: 'ai.claude', title: 'New Claude Chat', keywords: 'ai anthropic assistant llm', icon: 'sparkle', url: 'https://claude.ai/new', group: 'AI' },
-    { id: 'ai.chatgpt', title: 'New ChatGPT Chat', keywords: 'ai openai gpt assistant llm', icon: 'sparkle', url: 'https://chatgpt.com/', group: 'AI' },
-    { id: 'ai.gemini', title: 'New Gemini Chat', keywords: 'ai google bard assistant llm', icon: 'sparkle', url: 'https://gemini.google.com/app', group: 'AI' },
-    { id: 'ai.deepseek', title: 'New DeepSeek Chat', keywords: 'ai assistant llm', icon: 'sparkle', url: 'https://chat.deepseek.com/', group: 'AI' },
-    { id: 'ai.kimi', title: 'New Kimi Chat', keywords: 'ai moonshot assistant llm', icon: 'sparkle', url: 'https://www.kimi.com/', group: 'AI' },
+    ...AI.map((a) => ({
+      id: a.id,
+      title: `New ${a.name} Chat`,
+      keywords: `${a.keywords} ${a.aliases.join(' ')}`,
+      icon: 'sparkle',
+      url: a.url,
+      ai: a,
+      group: 'AI',
+    })),
 
     { id: 'window.new', title: 'New Window', keywords: 'open', icon: 'window', group: 'Window' },
     { id: 'window.incognito', title: 'New Private Window', keywords: 'incognito inprivate private', icon: 'incognito', group: 'Window' },
@@ -55,5 +81,5 @@
     return COMMANDS.map((c) => ({ ...c, title: resolve(c.title, currentTab), icon: resolve(c.icon, currentTab) }));
   }
 
-  Z.commands = { COMMANDS, list };
+  Z.commands = { AI, COMMANDS, list, parseAsk };
 })();

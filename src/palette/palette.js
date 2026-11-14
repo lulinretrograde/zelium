@@ -247,6 +247,10 @@
           break;
         case 'command':
           keys.push(['↵', 'run']);
+          if (row.data.ai) keys.push(['tab', 'write message']);
+          break;
+        case 'ask':
+          keys.push(['↵', 'send'], ['⇧↵', 'window']);
           break;
         case 'calc':
           keys.push(['↵', 'copy']);
@@ -400,7 +404,9 @@
         return act(() => row && this.activate(row, disposition), true);
       }
       if (key === 'Tab') {
-        return act(() => (row?.kind === 'bang' ? this.completeBang(row) : this.cycleMode(e.shiftKey ? -1 : 1)));
+        if (row?.kind === 'bang') return act(() => this.completeBang(row));
+        if (row?.kind === 'command' && row.data.ai && !e.shiftKey) return act(() => this.completeAsk(row.data.ai));
+        return act(() => this.cycleMode(e.shiftKey ? -1 : 1));
       }
       if (key === 'Backspace' && mod && (IS_MAC || e.shiftKey) && (row?.kind === 'tab' || row?.kind === 'history')) {
         return act(() => this.removeRow(row));
@@ -415,6 +421,12 @@
     cycleMode(dir) {
       const i = MODE_ORDER.indexOf(this.mode);
       this.setMode(MODE_ORDER[(i + dir + MODE_ORDER.length) % MODE_ORDER.length]);
+    }
+
+    /** Tab on "New Claude Chat" → "claude " so the message can be typed. */
+    completeAsk(ai) {
+      this.input.value = `${ai.aliases[0]} `;
+      this.onInput();
     }
 
     completeBang(row) {
@@ -508,8 +520,10 @@
           return [{ title: q ? 'Bookmarks' : 'Recently added', rows: this.bookmarkRows(q, LIMITS.mode) }];
         case 'history':
           return [{ title: q ? 'History' : 'Recently visited', rows: this.historyRows(q, LIMITS.mode) }];
-        case 'commands':
-          return [{ title: null, rows: this.commandRows(q, LIMITS.mode) }];
+        case 'commands': {
+          const ask = C.parseAsk(q);
+          return [{ title: null, rows: [...(ask ? [this.askRow(ask)] : []), ...this.commandRows(q, LIMITS.mode)] }];
+        }
         default:
           return this.computeAll(q);
       }
@@ -560,6 +574,8 @@
       }
 
       const top = [];
+      const ask = C.parseAsk(q);
+      if (ask) top.push(this.askRow(ask));
       const calc = P.calculate(q);
       if (calc) {
         top.push({ key: 'calc', kind: 'calc', icon: 'calc', title: `= ${calc.display}`, sub: calc.expr, meta: 'calculator', data: calc });
@@ -727,6 +743,19 @@
       };
     }
 
+    askRow({ ai, text }) {
+      return {
+        key: `ask:${ai.id}`,
+        kind: 'ask',
+        icon: 'sparkle',
+        fav: ai.url,
+        title: `Ask ${ai.name}: ${text}`,
+        sub: 'sends the message in a new chat',
+        meta: 'AI',
+        data: { ai, text },
+      };
+    }
+
     commandRows(q, limit, minScore) {
       const cmds = C.list(this.snapshot.current);
       if (!q) return cmds.slice(0, limit).map((c) => this.commandRow(c));
@@ -822,6 +851,12 @@
         case 'calc':
           await this.copyAndClose(row.data.display, `Copied ${row.data.display}`);
           return;
+        case 'ask':
+          return this.dispatch('aiChat', {
+            url: row.data.ai.url,
+            text: row.data.text,
+            disposition: disposition === 'current' ? 'newTab' : disposition,
+          });
         case 'command':
           if (row.data.url) {
             return this.dispatch('open', { url: row.data.url, disposition: disposition === 'current' ? 'newTab' : disposition });

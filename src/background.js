@@ -274,6 +274,10 @@ async function handle(msg, sender) {
       await prepareAction(msg, ctx);
       return openUrl(msg.url, msg.disposition, ctx);
 
+    case 'zelium:aiChat':
+      await prepareAction(msg, ctx);
+      return openAiChat(msg.url, msg.text, msg.disposition, ctx);
+
     case 'zelium:search':
       await prepareAction(msg, ctx);
       return webSearch(msg.text, msg.disposition, ctx);
@@ -434,6 +438,141 @@ async function openUrl(url, disposition = 'current', ctx) {
     await chrome.tabs.update(ctx.id, { url });
   }
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// AI chats: open a new chat, then type the message into it and send it.
+// ---------------------------------------------------------------------------
+
+/** Opens `url` in a new tab/window, waits for it to load, then sends `text`. */
+async function openAiChat(url, text, disposition = 'newTab', ctx) {
+  assertSafeUrl(url);
+  let tab;
+  if (disposition === 'newWindow') {
+    const win = await chrome.windows.create({ url, focused: true });
+    tab = win.tabs?.[0] ?? (await chrome.tabs.query({ windowId: win.id }))[0];
+  } else {
+    tab = await chrome.tabs.create({ url, windowId: ctx?.windowId, index: ctx ? ctx.index + 1 : undefined, active: true });
+  }
+  if (!text?.trim()) return true;
+  // A redirect (sign-in, consent page) can cut the script off; try again then.
+  let last;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await waitForTabLoad(tab.id);
+    try {
+      const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: typeIntoChat, args: [text] });
+      if (typeof res?.result === 'string') return res.result;
+    } catch (err) {
+      last = err;
+      if (!(await chrome.tabs.get(tab.id).catch(() => null))) break; // tab closed
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return `failed${last ? `: ${last.message}` : ''}`;
+}
+
+function waitForTabLoad(tabId, timeout = 30000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      clearTimeout(timer);
+      resolve();
+    };
+    const onUpdated = (id, info, t) => {
+      if (id === tabId && info.status === 'complete' && t.url && t.url !== 'about:blank') finish();
+    };
+    const timer = setTimeout(finish, timeout);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.get(tabId).then(
+      (t) => t.status === 'complete' && t.url && !t.url.startsWith('about:') && finish(),
+      finish,
+    );
+  });
+}
+
+/**
+ * Runs inside the chat page. Must be self-contained (it is serialised).
+ * Finds the message box, types the text with execCommand (so React, ProseMirror,
+ * Quill and Lexical editors all see a normal input), then clicks Send or
+ * presses Enter. Returns how it went, for tests and debugging.
+ */
+async function typeIntoChat(text) {
+  const SITES = [
+    // [host pattern, composer selectors, send-button selectors]
+    [/(^|\.)claude\.ai$/, ['div.ProseMirror[contenteditable="true"]', '[data-testid="chat-input"]'], ['button[aria-label="Send message"]', 'button[aria-label="Send Message"]']],
+    [/(^|\.)chatgpt\.com$/, ['#prompt-textarea', 'div.ProseMirror[contenteditable="true"]', 'textarea[aria-label*="ChatGPT"]'], ['button[data-testid="send-button"]', '#composer-submit-button', 'button[aria-label="Send message"]']],
+    [/^gemini\.google\.com$/, ['rich-textarea .ql-editor[contenteditable="true"]', '.ql-editor[contenteditable="true"]'], ['button.send-button', 'button[aria-label="Send message"]']],
+    [/(^|\.)deepseek\.com$/, ['textarea#chat-input', 'textarea'], []],
+    [/(^|\.)kimi\.(com|ai)$|moonshot\.cn$/, ['.chat-input-editor[contenteditable="true"]', '[data-lexical-editor="true"]'], ['.send-button-container:not(.disabled)', '.send-button']],
+  ];
+  const site = SITES.find(([re]) => re.test(location.hostname)) ?? [null, [], []];
+  const COMPOSERS = [...site[1], 'textarea:not([readonly]):not([disabled])', '[contenteditable="true"][role="textbox"]', '[contenteditable="true"]'];
+  const SENDS = [...site[2], 'button[data-testid*="send" i]', 'button[aria-label*="send" i]'];
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const visible = (el) => el.isConnected && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+  const find = (sels) => {
+    for (const sel of sels) for (const el of document.querySelectorAll(sel)) if (visible(el)) return el;
+    return null;
+  };
+  const enabled = (b) => !b.disabled && b.getAttribute('aria-disabled') !== 'true';
+  const read = (el) => ('value' in el && el.tagName === 'TEXTAREA' ? el.value : el.innerText || '').trim();
+
+  // Chat apps render their composer after hydration; wait for it.
+  let box;
+  for (const end = Date.now() + 20000; !(box = find(COMPOSERS)); ) {
+    if (Date.now() > end) return 'no-composer';
+    await sleep(200);
+  }
+  await sleep(400);
+  box = find(COMPOSERS) ?? box;
+
+  // Type the message, replacing whatever is there (some sites restore an old
+  // draft a moment after loading, so check and retype before sending).
+  const norm = (t) => t.replace(/\s+/g, ' ').trim();
+  const want = norm(text);
+  const type = async () => {
+    box.focus();
+    if (read(box)) {
+      document.execCommand('selectAll');
+      await sleep(50); // let the editor see the new selection
+    }
+    const ok = document.execCommand('insertText', false, text);
+    // Some editors (Lexical) render the change a frame later.
+    for (let i = 0; i < 5 && norm(read(box)) !== want; i++) await sleep(60);
+    if (!ok || !read(box)) {
+      if (box.tagName === 'TEXTAREA') {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(box, text);
+      } else {
+        box.textContent = text;
+      }
+      box.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+    }
+  };
+  for (let i = 0; i < 3 && norm(read(box)) !== want; i++) {
+    await type();
+    await sleep(250);
+  }
+  if (norm(read(box)) !== want) return 'not-typed';
+
+  // The send button usually enables a moment after the editor sees input.
+  for (const end = Date.now() + 1500; Date.now() < end; ) {
+    await sleep(120);
+    const btn = find(SENDS) ?? box.closest('form')?.querySelector('button[type="submit"]');
+    if (btn && enabled(btn)) {
+      btn.click();
+      return 'sent:button';
+    }
+  }
+  box.focus();
+  const init = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+  box.dispatchEvent(new KeyboardEvent('keydown', init));
+  box.dispatchEvent(new KeyboardEvent('keypress', init));
+  box.dispatchEvent(new KeyboardEvent('keyup', init));
+  return 'sent:enter';
 }
 
 async function webSearch(text, disposition = 'current', ctx) {
