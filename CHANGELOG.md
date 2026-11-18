@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **Actions menu:** <kbd>⌘.</kbd> / <kbd>Ctrl+.</kbd> or right-click on a result: pin, mute, reload,
+  close or move a tab; open in a new tab or window; copy URL or Markdown link; bookmark, move to a
+  folder, remove; forget a history entry.
+- **Learns from your picks:** results you choose for a query rank higher next time and become the
+  top hit. Local only; `> Clear Learned Results` resets it.
+- **Ask an AI about the current page:** *Ask Claude About This Page* (and the others) sends a prompt
+  with the page title, URL and your selection. <kbd>Tab</kbd> to write your own question.
+- **Bookmark commands:** bookmark / unbookmark the page, bookmark it in a folder or move it there.
+- **Copy every tab** in the window as URLs or a Markdown list.
+- **Downloads mode** and `> Open Latest Download`. Downloads access is an optional permission,
+  asked for on first use.
+- **Settings** on the options page: sections and result counts, a default bang for web search, your
+  own bangs, light/dark/system theme, the page prompt, learning on/off, and opt-in AI services
+  (Perplexity, Grok, Le Chat or your own `?q=` link; none on by default).
 - **Private overlay:** the palette now runs in an extension iframe inside the page overlay. Pages
   could previously read what you typed into it with a capture-phase key listener; now they can't
   see your keystrokes, the UI or your tabs/bookmarks/history. `frame.html` is the only file pages
@@ -14,6 +28,8 @@
 - `mailto:`/`tel:` links open directly; domains with unlisted TLDs work when they have a path or port.
 - Pasting text that starts with `/`, `#` or `@` no longer switches modes.
 - Fixed lost "recently used" tab updates when switching tabs quickly.
+- Fixed a copy confirmation closing the palette after you had already reopened it.
+- Footer hints that don't fit drop out whole instead of being cut off.
 
 ## 0.5.0 — 2026-11-14
 
