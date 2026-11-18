@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Private overlay:** the palette now runs in an extension iframe inside the page overlay. Pages
+  could previously read what you typed into it with a capture-phase key listener; now they can't
+  see your keystrokes, the UI or your tabs/bookmarks/history. `frame.html` is the only file pages
+  can load from the extension.
+- **Asking an AI from the main search needs a colon:** `claude: <message>`. Searches like
+  "claude code docs" stay searches. In `>` mode the colon is optional.
+- Dates and phone numbers (`2026-11-18`, `10/12/2024`, `1-800-555-0100`) are no longer calculated.
+- Errors from actions show in the overlay instead of the palette just closing. Bookmarklets are
+  labelled and explain that they can't run from Zelium.
+- `mailto:`/`tel:` links open directly; domains with unlisted TLDs work when they have a path or port.
+- Pasting text that starts with `/`, `#` or `@` no longer switches modes.
+- Fixed lost "recently used" tab updates when switching tabs quickly.
+
 ## 0.5.0 — 2026-11-14
 
 - **Ask an AI from the palette:** `claude <message>`, `gpt <message>` (or `chatgpt`), `gemini …`,
