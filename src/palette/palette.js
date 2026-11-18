@@ -27,8 +27,8 @@
 
   const EMPTY_SNAPSHOT = { current: null, windowCount: 1, tabs: [], bookmarks: [], folders: [], history: [], closed: [] };
 
+  // Per-section limits of the main search are settings (settings.limits).
   const LIMITS = {
-    all: { tabs: 6, bookmarks: 5, history: 8, commands: 3 },
     mode: 200,
     emptyRecent: 8,
     emptyClosed: 5,
@@ -100,6 +100,22 @@
   /** How long an action may take before the palette closes without waiting for it. */
   const QUICK_RESULT_MS = 400;
 
+  const THEME_KEY = 'zelium:theme';
+  const readLocal = (k) => {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  };
+  const writeLocal = (k, v) => {
+    try {
+      localStorage.setItem(k, v);
+    } catch {
+      /* storage blocked: the theme just applies a moment later */
+    }
+  };
+
   function lastSegment(path) {
     if (!path) return '';
     const parts = path.split(' / ');
@@ -146,6 +162,8 @@
 
     build() {
       const wrap = h('div', `z-wrap${this.embedded ? ' z-embedded' : ''}`);
+      // The last theme, remembered on the extension's origin, so the first paint already uses it.
+      wrap.dataset.theme = readLocal(THEME_KEY) || 'dark';
 
       if (!this.embedded) {
         const backdrop = h('div', 'z-backdrop');
@@ -311,7 +329,7 @@
       this.focus();
       // Settings and learned picks are local and quick; re-rank once they're in.
       this.prefsReady = Promise.all([S.load(), L.load()]).then(([settings, picks]) => {
-        this.settings = settings;
+        this.applySettings(settings);
         this.picks = picks;
         if (this.isOpen) this.update({ keepSel: true });
       });
@@ -672,7 +690,7 @@
                 fav: P.bangHome(b),
                 title: home ? `Open ${b.name}` : `Search ${b.name} for “${bang.query}”`,
                 sub: P.displayUrl(bang.url),
-                meta: `!${b.key}${b.ai ? ' · AI' : ''}`,
+                meta: `!${b.key}${b.ai ? ' · AI' : ''}${b.user ? ' · yours' : ''}`,
                 url: bang.url,
               },
             ],
@@ -693,22 +711,35 @@
         top.push({ key: `url:${url}`, kind: 'url', icon: 'link', title: P.displayUrl(url) || url, sub: url, meta: 'open', url });
       }
 
-      const tabs = this.tabRows(q, LIMITS.all.tabs);
-      const bookmarks = this.bookmarkRows(q, LIMITS.all.bookmarks);
+      const { sections: on, limits } = this.settings;
+      const tabs = on.tabs ? this.tabRows(q, limits.tabs) : [];
+      const bookmarks = on.bookmarks ? this.bookmarkRows(q, limits.bookmarks) : [];
       const seen = new Set([...tabs, ...bookmarks].map((r) => r.url));
-      const history = this.historyRows(q, LIMITS.all.history, seen);
+      const history = on.history ? this.historyRows(q, limits.history, seen) : [];
       const minScore = minScoreFor(q, 7);
-      const commands = this.commandRows(q, LIMITS.all.commands, minScore);
+      const commands = on.commands ? this.commandRows(q, limits.commands, minScore) : [];
       const hit = this.takeTopHit([tabs, bookmarks, history, commands]);
       if (hit) top.push(hit);
-      const search = {
-        key: 'search',
-        kind: 'search',
-        icon: 'search',
-        title: `Search the web for “${q}”`,
-        sub: '',
-        meta: 'default engine',
-      };
+      const engine = this.settings.defaultBang && P.bangFor(this.settings.defaultBang);
+      const search = engine
+        ? {
+            key: 'search',
+            kind: 'bangSearch',
+            icon: 'search',
+            fav: P.bangHome(engine),
+            title: `Search ${engine.name} for “${q}”`,
+            sub: '',
+            meta: `!${engine.key}`,
+            url: P.bangUrl(engine, q),
+          }
+        : {
+            key: 'search',
+            kind: 'search',
+            icon: 'search',
+            title: `Search the web for “${q}”`,
+            sub: '',
+            meta: 'default engine',
+          };
 
       return [
         { title: null, rows: top },
@@ -718,6 +749,16 @@
         { title: 'Commands', rows: commands },
         { title: 'Web', rows: [search] },
       ];
+    }
+
+    applySettings(settings) {
+      this.settings = settings;
+      P.setUserBangs(settings.customBangs);
+      C.setExtraAis(S.extraAis(settings));
+      this.wrap.dataset.theme = settings.theme;
+      writeLocal(THEME_KEY, settings.theme);
+      // A default bang that isn't one of the built-in few needs the full list.
+      if (settings.defaultBang && !P.bangFor(settings.defaultBang)) this.ensureBangs();
     }
 
     /** Learned boost for a row's item (0 if never picked for this query). */
@@ -927,8 +968,17 @@
         this.renderFootRight('Error: no current tab');
         return;
       }
-      const message = C.pageMessage(text || this.settings.pagePrompt, { title: tab.title, url: tab.url, selection: this.pageSelection });
-      return this.dispatch('aiChat', { url: ai.url, text: message, disposition: disposition === 'current' ? 'newTab' : disposition });
+      // Services that take the message in the URL get a shorter selection.
+      const selection = ai.template ? this.pageSelection?.slice(0, 1500) : this.pageSelection;
+      const message = C.pageMessage(text || this.settings.pagePrompt, { title: tab.title, url: tab.url, selection });
+      return this.sendToAi(ai, message, disposition);
+    }
+
+    /** New chat with `text`: typed in by Zelium, or in the URL for opt-in services. */
+    sendToAi(ai, text, disposition) {
+      const d = disposition === 'current' ? 'newTab' : disposition;
+      if (ai.template) return this.dispatch('open', { url: C.fillTemplate(ai.template, text), disposition: d });
+      return this.dispatch('aiChat', { url: ai.url, text, disposition: d });
     }
 
     commandRows(q, limit, minScore) {
@@ -949,7 +999,7 @@
         fav: P.bangHome(b),
         title: `!${b.key}`,
         sub: b.name,
-        meta: `${b.host}${b.ai ? ' · AI' : ''}`,
+        meta: `${b.host}${b.ai ? ' · AI' : ''}${b.user ? ' · yours' : ''}`,
         data: b,
       };
     }
@@ -1032,11 +1082,7 @@
           return;
         case 'ask':
           if (row.data.page) return this.askAboutPage(row.data.ai, row.data.text, disposition);
-          return this.dispatch('aiChat', {
-            url: row.data.ai.url,
-            text: row.data.text,
-            disposition: disposition === 'current' ? 'newTab' : disposition,
-          });
+          return this.sendToAi(row.data.ai, row.data.text, disposition);
         case 'command':
           if (row.data.aiPage) return this.askAboutPage(row.data.ai, '', disposition);
           if (row.data.url) {

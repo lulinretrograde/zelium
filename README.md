@@ -55,6 +55,12 @@ search the web.
 - **With an empty input** the palette shows your most recently used tabs and recently closed tabs.
 - **Works everywhere.** On pages extensions can't touch (`chrome://`, the new tab page, the Web Store,
   PDFs), Zelium opens the same palette in a small centred popup window instead.
+- **Settings** (Zelium's *Options*, or the welcome page): which sections the main search shows and
+  how many results each; a default bang for the web search row (e.g. `ddg`, `kagi`); your own
+  bangs (`trigger | Name | https://…%s`, they win over Helium's); a light, dark or system theme;
+  the "Ask … About This Page" prompt; learning on or off. More AI services (Perplexity, Grok,
+  Le Chat, or your own `?q=` link) are off until you turn them on. They get the message in the link
+  they open, so they need no extra permissions. Settings sync with your browser profile.
 - **Private by design.** No network requests, no analytics, no dependencies. Everything stays local.
 
 ## Compatibility

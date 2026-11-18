@@ -55,11 +55,74 @@
         </table>
       </section>
 
+      <form id="settings" autocomplete="off">
+        <div class="settings-head">
+          <h2>Settings</h2>
+          <span class="muted" id="saved" aria-live="polite"></span>
+        </div>
+
+        <section class="card">
+          <div class="label">Main search</div>
+          <table class="sections">
+            <tr><th>Section</th><th>Show</th><th>Results</th></tr>
+            <tr><td>Tabs</td><td><input type="checkbox" name="sections.tabs" /></td><td><input type="number" name="limits.tabs" min="1" max="20" /></td></tr>
+            <tr><td>Bookmarks</td><td><input type="checkbox" name="sections.bookmarks" /></td><td><input type="number" name="limits.bookmarks" min="1" max="20" /></td></tr>
+            <tr><td>History</td><td><input type="checkbox" name="sections.history" /></td><td><input type="number" name="limits.history" min="1" max="20" /></td></tr>
+            <tr><td>Commands</td><td><input type="checkbox" name="sections.commands" /></td><td><input type="number" name="limits.commands" min="1" max="20" /></td></tr>
+          </table>
+          <label class="field">
+            <span>Web search</span>
+            <input type="text" name="defaultBang" placeholder="browser's default engine" spellcheck="false" />
+            <small class="muted" id="defaultBang-info">A bang trigger like <kbd>ddg</kbd> or <kbd>kagi</kbd>, or empty for your browser's default engine.</small>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="learn" />
+            <span>Learn from what I pick: rank results I chose before higher. Stays in this browser.</span>
+          </label>
+          <button type="button" class="ghost" id="clear-learned">Clear learned results</button>
+        </section>
+
+        <section class="card">
+          <div class="label">Look</div>
+          <label class="field">
+            <span>Theme</span>
+            <select name="theme">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="system">Follow the system</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="card">
+          <div class="label">Your bangs</div>
+          <p class="muted">One per line: <kbd>trigger | Name | URL</kbd>, with <kbd>%s</kbd> where the search goes. These win over Helium's bangs with the same trigger.</p>
+          <textarea name="customBangs" rows="4" spellcheck="false" placeholder="mdn | MDN | https://developer.mozilla.org/search?q=%s"></textarea>
+          <small class="warn" id="customBangs-errors" hidden></small>
+        </section>
+
+        <section class="card">
+          <div class="label">AI</div>
+          <label class="field">
+            <span>“Ask … About This Page” sends, when you don't type a question</span>
+            <input type="text" name="pagePrompt" />
+          </label>
+          <p class="muted">More services, off unless you turn them on. They get your message in the link they open (<kbd>?q=</kbd>), so Zelium needs no access to the site. Le Chat's link isn't documented by Mistral and may not fill in the message.</p>
+          <div id="ai-presets"></div>
+          <p class="muted">Your own, one per line: <kbd>alias | Name | URL</kbd>, with <kbd>%s</kbd> where the message goes.</p>
+          <textarea name="customAis" rows="3" spellcheck="false" placeholder="myai | My AI | https://chat.example.com/?q=%s"></textarea>
+          <small class="warn" id="customAis-errors" hidden></small>
+        </section>
+      </form>
+
       <footer class="muted">
         Works on any page. On browser pages (settings, new tab, extension stores) the palette opens in a
         small window instead.
       </footer>
     </main>
+    <script src="palette/parse.js"></script>
+    <script src="palette/settings.js"></script>
+    <script src="palette/learn.js"></script>
     <script src="welcome.js"></script>
   </body>
 </html>

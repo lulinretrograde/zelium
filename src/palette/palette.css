@@ -15,6 +15,9 @@
   --z-hover: #363c46;
   --z-selected: #454a56;
   --z-backdrop: rgba(14, 15, 18, 0.45);
+  --z-text-selection: rgba(116, 173, 232, 0.3);
+  --z-scroll: rgba(220, 224, 229, 0.12);
+  --z-scroll-hover: rgba(220, 224, 229, 0.22);
   /* Zed's font first, then the best monospace each OS ships with:
      macOS (SF Mono, Menlo), Windows (Cascadia, Consolas), Linux/ChromeOS
      (DejaVu, Liberation, Noto, Ubuntu). */
@@ -50,6 +53,45 @@
 
 [hidden] {
   display: none !important;
+}
+
+/* Light theme (One Light), chosen in the options, or following the OS with "system". */
+.z-wrap[data-theme='light'] {
+  --z-bg: #ebebec;
+  --z-surface: #fafafa;
+  --z-border: #c9c9ca;
+  --z-border-variant: #dfdfe0;
+  --z-text: #242529;
+  --z-muted: #58585a;
+  --z-placeholder: #7e8087;
+  --z-accent: #4a6ed4;
+  --z-hover: #ececed;
+  --z-selected: #dcdcde;
+  --z-backdrop: rgba(30, 30, 35, 0.22);
+  --z-text-selection: rgba(74, 110, 212, 0.25);
+  --z-scroll: rgba(36, 37, 41, 0.14);
+  --z-scroll-hover: rgba(36, 37, 41, 0.26);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  .z-wrap[data-theme='system'] {
+    --z-bg: #ebebec;
+    --z-surface: #fafafa;
+    --z-border: #c9c9ca;
+    --z-border-variant: #dfdfe0;
+    --z-text: #242529;
+    --z-muted: #58585a;
+    --z-placeholder: #7e8087;
+    --z-accent: #4a6ed4;
+    --z-hover: #ececed;
+    --z-selected: #dcdcde;
+    --z-backdrop: rgba(30, 30, 35, 0.22);
+    --z-text-selection: rgba(74, 110, 212, 0.25);
+    --z-scroll: rgba(36, 37, 41, 0.14);
+    --z-scroll-hover: rgba(36, 37, 41, 0.26);
+    color-scheme: light;
+  }
 }
 
 /* ----- frame ------------------------------------------------------------ */
@@ -177,7 +219,7 @@
 }
 
 .z-input::selection {
-  background: rgba(116, 173, 232, 0.3);
+  background: var(--z-text-selection);
 }
 
 .z-count {
@@ -196,7 +238,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: rgba(220, 224, 229, 0.14) transparent;
+  scrollbar-color: var(--z-scroll) transparent;
 }
 
 .z-list::-webkit-scrollbar {
@@ -206,10 +248,10 @@
   background: transparent;
 }
 .z-list::-webkit-scrollbar-thumb {
-  background: rgba(220, 224, 229, 0.12);
+  background: var(--z-scroll);
 }
 .z-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(220, 224, 229, 0.22);
+  background: var(--z-scroll-hover);
 }
 
 .z-section {
@@ -339,6 +381,15 @@
 
 .z-foot-right {
   flex: none;
+}
+
+/* Mode hints that don't fit wrap onto a hidden second line, so they drop out
+   whole instead of being cut mid-hint. */
+.z-foot-left {
+  flex-wrap: wrap;
+  align-content: flex-start;
+  height: 17px;
+  row-gap: 12px;
 }
 
 .z-hint {

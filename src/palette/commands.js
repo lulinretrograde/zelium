@@ -22,6 +22,30 @@
   ];
 
   /**
+   * Opt-in services from the settings (Perplexity, your own…). They take the
+   * message in the URL (`template` with %s) instead of Zelium typing it.
+   */
+  let EXTRA = [];
+
+  function setExtraAis(list) {
+    EXTRA = (list || []).map((e) => {
+      let home = e.url;
+      try {
+        home = new URL(e.url.replaceAll('%s', '')).origin + '/';
+      } catch {
+        /* keep the template */
+      }
+      return { id: `ai.x.${e.alias}`, name: e.name, aliases: [e.alias], keywords: 'ai assistant llm', url: home, template: e.url };
+    });
+  }
+
+  /** Built-in services first, so they win alias clashes. */
+  const allAis = () => [...AI, ...EXTRA];
+
+  /** A service's URL with the message filled in (template services only). */
+  const fillTemplate = (template, text) => template.replaceAll('%s', encodeURIComponent(text));
+
+  /**
    * "claude how do bangs work" / "claude: how…" → { ai, text }; null unless an
    * alias + message. With `requireColon` (the main search), only "claude: …"
    * counts, so searches like "claude code docs" stay searches.
@@ -30,8 +54,25 @@
     const m = /^\s*([a-z]+)(\s*:\s*|\s+)(\S[\s\S]*)$/i.exec(query);
     if (!m || (requireColon && !m[2].includes(':'))) return null;
     const alias = m[1].toLowerCase();
-    const ai = AI.find((a) => a.aliases.includes(alias));
+    const ai = allAis().find((a) => a.aliases.includes(alias));
     return ai ? { ai, text: m[3].trim() } : null;
+  }
+
+  function newChatCommand(a) {
+    return { id: a.id, title: `New ${a.name} Chat`, keywords: `${a.keywords} ${a.aliases.join(' ')}`, icon: 'sparkle', url: a.url, ai: a, group: 'AI' };
+  }
+
+  function pageCommand(a) {
+    return {
+      id: `${a.id}.page`,
+      title: `Ask ${a.name} About This Page`,
+      keywords: `${a.keywords} ${a.aliases.join(' ')} summarize summary explain tldr current page site article`,
+      icon: 'sparkle',
+      url: a.url,
+      ai: a,
+      aiPage: true,
+      group: 'AI',
+    };
   }
 
   const COMMANDS = [
@@ -58,25 +99,8 @@
     { id: 'bookmark.toggle', title: (t) => (t?.bookmarked ? 'Remove Bookmark' : 'Bookmark Page'), keywords: 'favorite star save unbookmark delete', icon: 'bookmark', local: true, group: 'Bookmark' },
     { id: 'bookmark.folder', title: (t) => (t?.bookmarked ? 'Move Bookmark to Folder…' : 'Bookmark Page in Folder…'), keywords: 'favorite star save organize', icon: 'bookmark', local: true, group: 'Bookmark' },
 
-    ...AI.map((a) => ({
-      id: a.id,
-      title: `New ${a.name} Chat`,
-      keywords: `${a.keywords} ${a.aliases.join(' ')}`,
-      icon: 'sparkle',
-      url: a.url,
-      ai: a,
-      group: 'AI',
-    })),
-    ...AI.map((a) => ({
-      id: `${a.id}.page`,
-      title: `Ask ${a.name} About This Page`,
-      keywords: `${a.keywords} ${a.aliases.join(' ')} summarize summary explain tldr current page site article`,
-      icon: 'sparkle',
-      url: a.url,
-      ai: a,
-      aiPage: true,
-      group: 'AI',
-    })),
+    ...AI.map(newChatCommand),
+    ...AI.map(pageCommand),
 
     { id: 'window.new', title: 'New Window', keywords: 'open', icon: 'window', group: 'Window' },
     { id: 'window.incognito', title: 'New Private Window', keywords: 'incognito inprivate private', icon: 'incognito', group: 'Window' },
@@ -98,7 +122,7 @@
   /** "claude:" / "gpt" with no message yet → the service, else null. */
   function parseAskAlias(query) {
     const m = /^\s*([a-z]+)\s*:?\s*$/i.exec(query);
-    return m ? (AI.find((a) => a.aliases.includes(m[1].toLowerCase())) ?? null) : null;
+    return m ? (allAis().find((a) => a.aliases.includes(m[1].toLowerCase())) ?? null) : null;
   }
 
   const MAX_SELECTION = 4000;
@@ -118,8 +142,9 @@
 
   /** Commands with titles/icons resolved for the current tab. */
   function list(currentTab) {
-    return COMMANDS.map((c) => ({ ...c, title: resolve(c.title, currentTab), icon: resolve(c.icon, currentTab) }));
+    const all = [...COMMANDS, ...EXTRA.map(newChatCommand), ...EXTRA.map(pageCommand)];
+    return all.map((c) => ({ ...c, title: resolve(c.title, currentTab), icon: resolve(c.icon, currentTab) }));
   }
 
-  Z.commands = { AI, COMMANDS, list, parseAsk, parseAskAlias, pageMessage, MAX_SELECTION };
+  Z.commands = { AI, COMMANDS, list, parseAsk, parseAskAlias, pageMessage, MAX_SELECTION, setExtraAis, allAis, fillTemplate };
 })();

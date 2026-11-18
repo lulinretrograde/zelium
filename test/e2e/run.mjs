@@ -614,6 +614,64 @@ async function main() {
       }
     });
 
+    await test('options page: theme, sections, default bang and an opt-in AI reach the palette', async () => {
+      const wt = await waitFor(() => findTarget((t) => t.url.includes('/welcome.html')), { message: 'options page' });
+      const w = connect(wt.webSocketDebuggerUrl);
+      try {
+        await waitFor(() => w.evaluate(`document.querySelector('[name="theme"]').value === 'dark'`), { message: 'settings filled' });
+        await w.evaluate(`(() => {
+          const f = document.getElementById('settings');
+          const set = (name, v) => {
+            const el = f.elements.namedItem(name);
+            if (el.type === 'checkbox') el.checked = v; else el.value = v;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+          };
+          set('theme', 'light');
+          set('sections.history', false);
+          set('defaultBang', '!ddg');
+          set('customBangs', 'zz | Zed Zone | https://zed.example/?q=%s\\nbroken line');
+          const grok = f.querySelector('input[name="aiPresets"][value="grok"]');
+          grok.checked = true;
+          grok.dispatchEvent(new Event('input', { bubbles: true }));
+        })()`);
+        const saved = await waitFor(() => swEval(`return (await chrome.storage.sync.get('settings')).settings`), { message: 'saved settings' });
+        assert(saved.theme === 'light' && saved.sections.history === false && saved.defaultBang === 'ddg', JSON.stringify(saved));
+        assert(saved.customBangs.length === 1 && saved.aiPresets.join() === 'grok', JSON.stringify(saved));
+        assert(await w.evaluate(`!document.getElementById('customBangs-errors').hidden`), 'broken bang line not reported');
+
+        await a.send('Page.bringToFront');
+        await openOn('a', a);
+        await waitFor(() => a.palette(`p.prefsReady?.then(() => p.wrap.dataset.theme === 'light')`), { message: 'light theme' });
+        await a.send('Input.insertText', { text: 'zed' });
+        const rows = await waitFor(() => a.palette(`p.query === 'zed' && p.sections.map((s) => s.title)`), { message: 'results' });
+        assert(!rows.includes('History'), `sections ${rows}`);
+        const search = await a.palette(`p.rows.find((r) => r.key === 'search')`);
+        assert(search.kind === 'bangSearch' && search.url.startsWith('https://duckduckgo.com/') && search.url.includes('zed'), JSON.stringify(search));
+        await closeOn(a);
+
+        await openOn('a', a);
+        await a.send('Input.insertText', { text: 'serde !zz' });
+        await waitFor(() => a.palette(`p.rows[0]?.url === 'https://zed.example/?q=serde'`), { message: 'your bang' });
+        await closeOn(a);
+
+        await openOn('a', a);
+        await a.palette(`(p._send ??= p.send, p.send = async (type, data) => type === 'open' ? ((window.__opened = data), true) : p._send(type, data), window.__opened = null, true)`);
+        await a.send('Input.insertText', { text: 'grok: hi there' });
+        await waitFor(() => a.palette(`p.rows[0]?.kind === 'ask' && p.rows[0].data.ai.name === 'Grok'`), { message: 'Grok ask row' });
+        await press(a, 'Enter');
+        const opened = await waitFor(() => a.palette('window.__opened'), { message: 'Grok link' });
+        assert(opened.url === 'https://grok.com/?q=hi%20there' && opened.disposition === 'newTab', JSON.stringify(opened));
+      } finally {
+        await a.palette('(p._send && (p.send = p._send), true)').catch(() => {});
+        await swEval(`await chrome.storage.sync.remove('settings')`);
+        w.close();
+      }
+      // Back to defaults on the next open.
+      await openOn('a', a);
+      await waitFor(() => a.palette(`p.prefsReady?.then(() => p.wrap.dataset.theme === 'dark')`), { message: 'dark again' });
+      await closeOn(a);
+    });
+
     await test('> AI command opens a new Claude chat in a new tab', async () => {
       await a.send('Page.bringToFront');
       await openOn('a', a);

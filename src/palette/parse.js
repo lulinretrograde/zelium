@@ -38,13 +38,16 @@
   const F_SPACE_PLUS = 4;
 
   let bangIndex = null;
+  let baseRows = DEFAULT_ROWS;
+  let userRows = [];
+  let userKey = '[]';
   let fullListLoaded = false;
 
   function buildIndex(rows) {
     const map = new Map();
     const sorted = [];
     rows.forEach(([name, triggers, url, flags, category], index) => {
-      const entry = { name, triggers: triggers.split(' '), url, flags: flags || 0, ai: category === 'ai', index };
+      const entry = { name, triggers: triggers.split(' '), url, flags: flags || 0, ai: category === 'ai', user: category === 'user', index };
       for (const t of entry.triggers) {
         const key = t.toLowerCase();
         if (map.has(key)) continue;
@@ -57,17 +60,28 @@
   }
 
   function index() {
-    bangIndex ??= buildIndex(DEFAULT_ROWS);
+    // Your own bangs come first, so they win over Helium's on the same trigger.
+    bangIndex ??= buildIndex([...userRows, ...baseRows]);
     return bangIndex;
   }
 
   /** Install the full bang list (rows in the compact format above). */
   function setBangs(rows) {
-    bangIndex = buildIndex(rows);
+    baseRows = rows;
+    bangIndex = null;
     fullListLoaded = true;
   }
 
   const hasFullBangs = () => fullListLoaded;
+
+  /** Install your own bangs ([{ trigger, name, url with %s }], from the settings). */
+  function setUserBangs(list) {
+    const key = JSON.stringify(list || []);
+    if (key === userKey) return;
+    userKey = key;
+    userRows = (list || []).map((b) => [b.name, b.trigger, b.url.replaceAll('%s', '{searchTerms}'), 0, 'user']);
+    bangIndex = null;
+  }
 
   /** A user-facing bang object for a trigger. */
   function bangFor(trigger) {
@@ -79,7 +93,7 @@
     } catch {
       /* ignore */
     }
-    return { key: trigger.toLowerCase(), name: entry.name, url: entry.url, flags: entry.flags, ai: entry.ai, host, entry };
+    return { key: trigger.toLowerCase(), name: entry.name, url: entry.url, flags: entry.flags, ai: entry.ai, user: entry.user, host, entry };
   }
 
   function encodeTerms(bang, query) {
@@ -408,5 +422,5 @@
     return `${Math.floor(d / 365)}y`;
   }
 
-  Z.parse = { setBangs, hasFullBangs, suggestBangs, bangFor, bangHome, parseBang, bangUrl, detectUrl, calculate, evaluate, displayUrl, relativeTime, markdownLink, formatTabList };
+  Z.parse = { setBangs, setUserBangs, hasFullBangs, suggestBangs, bangFor, bangHome, parseBang, bangUrl, detectUrl, calculate, evaluate, displayUrl, relativeTime, markdownLink, formatTabList };
 })();
