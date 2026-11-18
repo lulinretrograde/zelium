@@ -280,6 +280,7 @@
     // ----- lifecycle ---------------------------------------------------------
 
     async open() {
+      clearTimeout(this.closeTimer);
       this.isOpen = true;
       this.view = null;
       this.mode = 'all';
@@ -302,10 +303,17 @@
     }
 
     close() {
+      clearTimeout(this.closeTimer);
       if (!this.isOpen) return;
       this.isOpen = false;
       clearTimeout(this.historyTimer);
       this.onClose?.();
+    }
+
+    /** Close after a confirmation has been readable for a moment; cancelled if the palette closes or reopens first. */
+    closeSoon() {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = setTimeout(() => this.close(), 380);
     }
 
     focus() {
@@ -983,7 +991,7 @@
       if (done && this.isOpen) {
         // Say what happened before closing (for actions with no visible effect).
         this.renderFootRight(done);
-        setTimeout(() => this.close(), 380);
+        this.closeSoon();
       } else {
         this.close();
       }
@@ -1036,7 +1044,7 @@
     async copyAndClose(text, message) {
       const ok = await this.copyText(text);
       this.renderFootRight(ok ? message : 'Copy failed');
-      if (ok) setTimeout(() => this.close(), 380);
+      if (ok) this.closeSoon();
     }
 
     async copyText(text) {
