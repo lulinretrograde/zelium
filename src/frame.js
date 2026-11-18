@@ -19,7 +19,7 @@
     [port] = e.ports;
     if (!port) return;
     port.onmessage = ({ data }) => {
-      if (data?.type === 'open') palette.open();
+      if (data?.type === 'open') palette.open({ selection: typeof data.selection === 'string' ? data.selection : '' });
       else if (data?.type === 'close') palette.close();
     };
     port.postMessage({ type: 'ready' });

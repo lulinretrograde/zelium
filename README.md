@@ -34,6 +34,9 @@ search the web.
   and press <kbd>↵</kbd> (in `>` mode the colon is optional; without it, the main search just searches). Zelium opens a new chat, types the message in and sends it. Or pick
   *New Claude Chat* (etc.) and press <kbd>Tab</kbd> to write the message. You need to be signed in to
   the service; if Zelium can't find the message box (a sign-in page, or the site changed its layout), the new chat just stays open.
+- **Ask an AI about the page you're on:** *Ask Claude About This Page* (or ChatGPT, Gemini, …)
+  sends "Summarize this page." with the page title and URL, plus any text you had selected. Press
+  <kbd>Tab</kbd> on it to write your own question instead.
 - **Calculator:** `2*(3+4)`, `sqrt(2)^2`, `2*pi`. <kbd>↵</kbd> copies the result.
 - **Direct URLs:** `github.com`, `localhost:3000`, `192.168.1.1` open straight away.
 - **Web search** goes through **your browser's default search engine**.

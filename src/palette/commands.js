@@ -67,6 +67,16 @@
       ai: a,
       group: 'AI',
     })),
+    ...AI.map((a) => ({
+      id: `${a.id}.page`,
+      title: `Ask ${a.name} About This Page`,
+      keywords: `${a.keywords} ${a.aliases.join(' ')} summarize summary explain tldr current page site article`,
+      icon: 'sparkle',
+      url: a.url,
+      ai: a,
+      aiPage: true,
+      group: 'AI',
+    })),
 
     { id: 'window.new', title: 'New Window', keywords: 'open', icon: 'window', group: 'Window' },
     { id: 'window.incognito', title: 'New Private Window', keywords: 'incognito inprivate private', icon: 'incognito', group: 'Window' },
@@ -85,6 +95,25 @@
     { id: 'learn.clear', title: 'Clear Learned Results', keywords: 'forget reset ranking picks frecency', icon: 'close', local: true, group: 'Zelium' },
   ];
 
+  /** "claude:" / "gpt" with no message yet → the service, else null. */
+  function parseAskAlias(query) {
+    const m = /^\s*([a-z]+)\s*:?\s*$/i.exec(query);
+    return m ? (AI.find((a) => a.aliases.includes(m[1].toLowerCase())) ?? null) : null;
+  }
+
+  const MAX_SELECTION = 4000;
+
+  /** The message for "Ask … About This Page": your text, then the page and any selected text. */
+  function pageMessage(text, { title, url, selection }) {
+    const parts = [text.trim(), '', `Page: ${title && title !== url ? `${title}\n` : ''}${url}`];
+    const sel = (selection || '').trim();
+    if (sel) {
+      const cut = sel.length > MAX_SELECTION ? `${sel.slice(0, MAX_SELECTION)}…` : sel;
+      parts.push('', 'Selected text:', '"""', cut, '"""');
+    }
+    return parts.join('\n');
+  }
+
   const resolve = (v, tab) => (typeof v === 'function' ? v(tab) : v);
 
   /** Commands with titles/icons resolved for the current tab. */
@@ -92,5 +121,5 @@
     return COMMANDS.map((c) => ({ ...c, title: resolve(c.title, currentTab), icon: resolve(c.icon, currentTab) }));
   }
 
-  Z.commands = { AI, COMMANDS, list, parseAsk };
+  Z.commands = { AI, COMMANDS, list, parseAsk, parseAskAlias, pageMessage, MAX_SELECTION };
 })();

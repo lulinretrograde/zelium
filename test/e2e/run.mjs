@@ -590,6 +590,30 @@ async function main() {
       await closeOn(a);
     });
 
+    await test('Ask Claude About This Page: message with title, URL and the page selection', async () => {
+      await a.send('Page.bringToFront');
+      await a.evaluate(`(() => { const r = document.createRange(); r.selectNodeContents(document.querySelector('h1')); getSelection().removeAllRanges(); getSelection().addRange(r); })()`);
+      await openOn('a', a);
+      await a.palette(`(p._send ??= p.send, p.send = async (type, data) => type === 'aiChat' ? ((window.__ai = data), true) : p._send(type, data), window.__ai = null, true)`);
+      try {
+        await a.send('Input.insertText', { text: '>ask claude about this page' });
+        await waitFor(() => a.palette(`p.rows[0]?.data?.id === 'ai.claude.page'`), { message: 'page command' });
+        await press(a, 'Tab');
+        await waitFor(() => a.palette(`p.rows[0]?.kind === 'ask' && p.rows[0].data.page`), { message: 'page ask row with the default prompt' });
+        await a.send('Input.insertText', { text: 'explain it' });
+        const title = await waitFor(() => a.palette(`p.rows[0]?.data?.text === 'explain it' && p.rows[0].title`), { message: 'ask row' });
+        assert(title === 'Ask Claude about this page: explain it', title);
+        await press(a, 'Enter');
+        const sent = await waitFor(() => a.palette('window.__ai'), { message: 'aiChat message' });
+        assert(sent.url === 'https://claude.ai/new', sent.url);
+        const want = `explain it\n\nPage: Alpha Zed Page\n${base}/a.html\n\nSelected text:\n"""\nAlpha\n"""`;
+        assert(sent.text === want, JSON.stringify(sent.text));
+      } finally {
+        await a.palette('(p.send = p._send, true)');
+        await a.evaluate('getSelection().removeAllRanges()');
+      }
+    });
+
     await test('> AI command opens a new Claude chat in a new tab', async () => {
       await a.send('Page.bringToFront');
       await openOn('a', a);
@@ -632,13 +656,16 @@ async function main() {
       ['/chat-ta.html', 'sent:enter'],
     ]) {
       await test(`ask AI: types the message and sends it (${page})`, async () => {
-        const result = await swEval(`return await openAiChat(${JSON.stringify(base + page)}, 'hello from zelium', 'newTab')`);
+        // Multi-line, like an Ask … About This Page message.
+        const message = 'hello from zelium\n\nPage: Alpha\nhttp://x.test/a';
+        const result = await swEval(`return await openAiChat(${JSON.stringify(base + page)}, ${JSON.stringify(message)}, 'newTab')`);
         assert(result === expected, `result ${result}`);
         const id = await swEval(`return (await chrome.tabs.query({})).find((t) => t.url === ${JSON.stringify(base + page)})?.id`);
         const sent = await swEval(
           `return (await chrome.scripting.executeScript({ target: { tabId: ${id} }, world: 'MAIN', func: () => window.__sent }))[0].result`,
         );
-        assert(JSON.stringify(sent) === '["hello from zelium"]', `sent ${JSON.stringify(sent)}`);
+        const norm = (s) => s.replace(/\s+/g, ' ').trim();
+        assert(sent?.length === 1 && norm(sent[0]) === norm(message), `sent ${JSON.stringify(sent)}`);
         await swEval(`await chrome.tabs.remove(${id})`);
       });
     }

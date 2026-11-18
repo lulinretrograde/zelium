@@ -293,10 +293,13 @@
 
     // ----- lifecycle ---------------------------------------------------------
 
-    async open() {
+    /** @param {{selection?: string}} [o] text selected on the page (overlay only) */
+    async open({ selection = '' } = {}) {
       clearTimeout(this.closeTimer);
       this.isOpen = true;
       this.view = null;
+      this.pageSelection = selection;
+      this.askPage = null; // AI id while writing an "Ask … About This Page" message
       this.mode = 'all';
       this.query = '';
       this.input.value = '';
@@ -501,7 +504,7 @@
       if (key === 'Tab') {
         if (this.view) return act(() => {});
         if (row?.kind === 'bang') return act(() => this.completeBang(row));
-        if (row?.kind === 'command' && row.data.ai && !e.shiftKey) return act(() => this.completeAsk(row.data.ai));
+        if (row?.kind === 'command' && row.data.ai && !e.shiftKey) return act(() => this.completeAsk(row.data.ai, !!row.data.aiPage));
         return act(() => this.cycleMode(e.shiftKey ? -1 : 1));
       }
       if (mod && key === '.' && !this.view) return act(() => this.openActions(row));
@@ -521,8 +524,12 @@
       this.setMode(MODE_ORDER[(i + dir + MODE_ORDER.length) % MODE_ORDER.length]);
     }
 
-    /** Tab on "New Claude Chat" → "claude " (">" mode) or "claude: " (main search) to type the message. */
-    completeAsk(ai) {
+    /**
+     * Tab on "New Claude Chat" → "claude " (">" mode) or "claude: " (main search)
+     * to type the message. On "Ask Claude About This Page" the message is about the page.
+     */
+    completeAsk(ai, page = false) {
+      this.askPage = page ? ai.id : null;
       this.input.value = this.mode === 'all' ? `${ai.aliases[0]}: ` : `${ai.aliases[0]} `;
       this.onInput();
     }
@@ -621,7 +628,7 @@
         case 'history':
           return [{ title: q ? 'History' : 'Recently visited', rows: this.historyRows(q, LIMITS.mode) }];
         case 'commands': {
-          const ask = C.parseAsk(q);
+          const ask = this.askFor(q, false);
           return [{ title: null, rows: [...(ask ? [this.askRow(ask)] : []), ...this.commandRows(q, LIMITS.mode)] }];
         }
         default:
@@ -675,7 +682,7 @@
 
       const top = [];
       // Mixed results: only an explicit "claude: …" asks, so "claude code docs" still searches.
-      const ask = C.parseAsk(q, { requireColon: true });
+      const ask = this.askFor(q, true);
       if (ask) top.push(this.askRow(ask));
       const calc = P.calculate(q);
       if (calc) {
@@ -875,7 +882,31 @@
       };
     }
 
-    askRow({ ai, text }) {
+    /** An "ask an AI" row for the query, if it is one; about the page after Tab on "Ask … About This Page". */
+    askFor(q, requireColon) {
+      let ask = C.parseAsk(q, { requireColon });
+      if (!ask && this.askPage) {
+        const ai = C.parseAskAlias(q);
+        if (ai) ask = { ai, text: '' };
+      }
+      if (ask && ask.ai.id === this.askPage) ask.page = true;
+      return ask;
+    }
+
+    askRow({ ai, text, page = false }) {
+      if (page) {
+        const sel = this.pageSelection?.trim();
+        return {
+          key: `ask:${ai.id}:page`,
+          kind: 'ask',
+          icon: 'sparkle',
+          fav: ai.url,
+          title: `Ask ${ai.name} about this page: ${text || this.settings.pagePrompt}`,
+          sub: `sends it with the page title and URL${sel ? ' and your selection' : ''}`,
+          meta: 'AI',
+          data: { ai, text, page },
+        };
+      }
       return {
         key: `ask:${ai.id}`,
         kind: 'ask',
@@ -886,6 +917,18 @@
         meta: 'AI',
         data: { ai, text },
       };
+    }
+
+    /** Open a new chat and send `text` (or the default prompt) with the page's title, URL and selection. */
+    async askAboutPage(ai, text, disposition) {
+      const fresh = await this.snapshotReady?.catch(() => null);
+      const tab = fresh?.current ?? this.snapshot.current;
+      if (!tab) {
+        this.renderFootRight('Error: no current tab');
+        return;
+      }
+      const message = C.pageMessage(text || this.settings.pagePrompt, { title: tab.title, url: tab.url, selection: this.pageSelection });
+      return this.dispatch('aiChat', { url: ai.url, text: message, disposition: disposition === 'current' ? 'newTab' : disposition });
     }
 
     commandRows(q, limit, minScore) {
@@ -988,12 +1031,14 @@
           await this.copyAndClose(row.data.display, `Copied ${row.data.display}`);
           return;
         case 'ask':
+          if (row.data.page) return this.askAboutPage(row.data.ai, row.data.text, disposition);
           return this.dispatch('aiChat', {
             url: row.data.ai.url,
             text: row.data.text,
             disposition: disposition === 'current' ? 'newTab' : disposition,
           });
         case 'command':
+          if (row.data.aiPage) return this.askAboutPage(row.data.ai, '', disposition);
           if (row.data.url) {
             return this.dispatch('open', { url: row.data.url, disposition: disposition === 'current' ? 'newTab' : disposition });
           }

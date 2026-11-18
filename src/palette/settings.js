@@ -8,6 +8,8 @@
   const DEFAULTS = {
     /** Rank results you picked before for a query higher (kept locally only). */
     learn: true,
+    /** Sent by "Ask … About This Page" when you don't type a message. */
+    pagePrompt: 'Summarize this page.',
   };
 
   /** Defaults merged with what's stored, ignoring unknown keys and wrong types. */

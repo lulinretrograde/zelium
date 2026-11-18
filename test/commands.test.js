@@ -38,5 +38,28 @@ test('every AI service has a command with an https url', () => {
     assert.ok(cmd, a.id);
     assert.match(cmd.url, /^https:\/\//);
     assert.equal(cmd.group, 'AI');
+    const page = COMMANDS.find((c) => c.id === `${a.id}.page`);
+    assert.ok(page?.aiPage, `${a.id}.page`);
   }
+});
+
+test('parseAskAlias: an alias with no message yet', () => {
+  const { parseAskAlias } = globalThis.Zelium.commands;
+  assert.equal(parseAskAlias('claude:').id, 'ai.claude');
+  assert.equal(parseAskAlias(' gpt ').id, 'ai.chatgpt');
+  assert.equal(parseAskAlias('claude: hi'), null);
+  assert.equal(parseAskAlias('nope:'), null);
+});
+
+test('pageMessage: text, then the page, then the selection (capped)', () => {
+  const { pageMessage, MAX_SELECTION } = globalThis.Zelium.commands;
+  assert.equal(
+    pageMessage(' Summarize this page. ', { title: 'Docs', url: 'https://x.org/d' }),
+    'Summarize this page.\n\nPage: Docs\nhttps://x.org/d',
+  );
+  assert.equal(pageMessage('Q', { title: 'https://x.org', url: 'https://x.org' }), 'Q\n\nPage: https://x.org');
+  const withSel = pageMessage('Explain', { title: 'T', url: 'https://x.org', selection: '  some code  ' });
+  assert.ok(withSel.endsWith('\n\nSelected text:\n"""\nsome code\n"""'), withSel);
+  const long = pageMessage('Q', { title: 'T', url: 'u', selection: 'x'.repeat(MAX_SELECTION + 50) });
+  assert.ok(long.includes(`${'x'.repeat(MAX_SELECTION)}…`) && !long.includes('x'.repeat(MAX_SELECTION + 1)));
 });

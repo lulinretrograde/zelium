@@ -97,16 +97,25 @@
     }
   }
 
+  // Text selected on the page when the palette opened, for "Ask … About This Page".
+  // It goes only to the extension's frame, over the private channel.
+  let selection = '';
+
   function reveal() {
     frame.style.visibility = 'visible';
     frame.focus();
-    port.postMessage({ type: 'open' });
+    port.postMessage({ type: 'open', selection });
   }
 
   function show() {
     if (visible) return;
     visible = true;
     previousFocus = document.activeElement;
+    try {
+      selection = String(window.getSelection() ?? '').slice(0, 20000);
+    } catch {
+      selection = '';
+    }
     if (!host?.isConnected) {
       // First use, or the page threw our host away (which also kills the iframe).
       host?.remove();
