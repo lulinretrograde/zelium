@@ -479,6 +479,18 @@ async function main() {
       }
     });
 
+    await test("> Copy All Tabs as Markdown List copies the window's tabs", async () => {
+      await a.send('Page.bringToFront');
+      await openOn('a', a);
+      await a.palette('(p.copyText = async (text) => ((window.__copied = text), true), true)');
+      await a.send('Input.insertText', { text: '>copy all tabs markdown' });
+      await waitFor(() => a.palette(`p.rows[0]?.data?.id === 'copy.windowMarkdown'`), { message: 'command row' });
+      await press(a, 'Enter');
+      const copied = await waitFor(() => a.palette('window.__copied'), { message: 'copied text' });
+      assert(copied.includes(`- [Alpha Zed Page](${base}/a.html)`), copied);
+      await closeOn(a);
+    });
+
     await test('> AI command opens a new Claude chat in a new tab', async () => {
       await a.send('Page.bringToFront');
       await openOn('a', a);

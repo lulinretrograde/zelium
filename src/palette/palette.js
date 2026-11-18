@@ -933,9 +933,11 @@
       const { url, title } = tab;
       if (id === 'copy.url') return this.copyAndClose(url, 'Copied URL');
       if (id === 'copy.title') return this.copyAndClose(title, 'Copied title');
-      if (id === 'copy.markdown') {
-        const safeTitle = title.replace(/([[\]\\])/g, '\\$1');
-        return this.copyAndClose(`[${safeTitle}](${url})`, 'Copied Markdown link');
+      if (id === 'copy.markdown') return this.copyAndClose(P.markdownLink(title, url), 'Copied Markdown link');
+      if (id === 'copy.windowUrls' || id === 'copy.windowMarkdown') {
+        const tabs = (fresh ?? this.snapshot).tabs.filter((t) => t.windowId === tab.windowId).sort((a, b) => a.index - b.index);
+        const format = id === 'copy.windowMarkdown' ? 'markdown' : 'urls';
+        return this.copyAndClose(P.formatTabList(tabs, format), `Copied ${tabs.length} tab${tabs.length === 1 ? '' : 's'}`);
       }
     }
 

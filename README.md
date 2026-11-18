@@ -38,7 +38,7 @@ search the web.
 - **Direct URLs:** `github.com`, `localhost:3000`, `192.168.1.1` open straight away.
 - **Web search** goes through **your browser's default search engine**.
 - **Commands (`>`):**
-  - copy URL, copy title, copy as a Markdown link
+  - copy URL, copy title, copy as a Markdown link; copy every tab in the window as URLs or a Markdown list
   - new, close, duplicate, pin or mute a tab; close other tabs, tabs to the right, or duplicates
   - reload or hard reload; move a tab to a new window; sort tabs by domain; reopen a closed tab
   - new window or incognito window; zoom in, out or reset

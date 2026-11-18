@@ -135,3 +135,20 @@ test('relativeTime buckets', () => {
   assert.equal(relativeTime(now - 2 * 86400e3, now), '2d');
   assert.equal(relativeTime(0, now), '');
 });
+
+test('markdownLink escapes the title and encodes the URL', () => {
+  const { markdownLink } = globalThis.Zelium.parse;
+  assert.equal(markdownLink('A [b] c', 'https://x.org/a'), '[A \\[b\\] c](https://x.org/a)');
+  assert.equal(markdownLink('W', 'https://en.wikipedia.org/wiki/Foo_(bar) x'), '[W](https://en.wikipedia.org/wiki/Foo_%28bar%29%20x)');
+  assert.equal(markdownLink('', 'https://x.org'), '[https://x.org](https://x.org)');
+});
+
+test('formatTabList: URLs or a Markdown list', () => {
+  const { formatTabList } = globalThis.Zelium.parse;
+  const tabs = [
+    { title: 'One', url: 'https://one.org' },
+    { title: 'Two', url: 'https://two.org' },
+  ];
+  assert.equal(formatTabList(tabs, 'urls'), 'https://one.org\nhttps://two.org');
+  assert.equal(formatTabList(tabs, 'markdown'), '- [One](https://one.org)\n- [Two](https://two.org)');
+});

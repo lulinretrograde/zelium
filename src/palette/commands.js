@@ -38,6 +38,8 @@
     { id: 'copy.url', title: 'Copy URL', keywords: 'link address clipboard', icon: 'copy', local: true, group: 'Copy' },
     { id: 'copy.markdown', title: 'Copy as Markdown Link', keywords: 'md link clipboard', icon: 'markdown', local: true, group: 'Copy' },
     { id: 'copy.title', title: 'Copy Page Title', keywords: 'name clipboard', icon: 'text', local: true, group: 'Copy' },
+    { id: 'copy.windowUrls', title: 'Copy All Tab URLs in Window', keywords: 'links list clipboard every tabs', icon: 'copy', local: true, group: 'Copy' },
+    { id: 'copy.windowMarkdown', title: 'Copy All Tabs as Markdown List', keywords: 'md links list clipboard every tabs', icon: 'markdown', local: true, group: 'Copy' },
 
     { id: 'tab.new', title: 'New Tab', keywords: 'open create', icon: 'plus', group: 'Tab' },
     { id: 'tab.close', title: 'Close Tab', keywords: 'remove kill', icon: 'close', group: 'Tab' },

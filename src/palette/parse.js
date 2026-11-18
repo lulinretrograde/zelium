@@ -373,6 +373,18 @@
   // Formatting helpers
   // -------------------------------------------------------------------------
 
+  /** "[title](url)" with the title's brackets escaped and the URL's spaces/parentheses encoded. */
+  function markdownLink(title, url) {
+    const t = (title || url).replace(/([[\]\\])/g, '\\$1');
+    const u = url.replace(/ /g, '%20').replace(/\(/g, '%28').replace(/\)/g, '%29');
+    return `[${t}](${u})`;
+  }
+
+  /** Tabs as one URL per line, or as a Markdown list of links. */
+  function formatTabList(tabs, format) {
+    return tabs.map((t) => (format === 'markdown' ? `- ${markdownLink(t.title, t.url)}` : t.url)).join('\n');
+  }
+
   function displayUrl(url) {
     if (!url) return '';
     return url
@@ -396,5 +408,5 @@
     return `${Math.floor(d / 365)}y`;
   }
 
-  Z.parse = { setBangs, hasFullBangs, suggestBangs, bangFor, bangHome, parseBang, bangUrl, detectUrl, calculate, evaluate, displayUrl, relativeTime };
+  Z.parse = { setBangs, hasFullBangs, suggestBangs, bangFor, bangHome, parseBang, bangUrl, detectUrl, calculate, evaluate, displayUrl, relativeTime, markdownLink, formatTabList };
 })();
