@@ -320,6 +320,16 @@ async function main() {
       page.close();
     });
 
+    await test('recently-used tab updates that overlap are all kept', async () => {
+      const kept = await swEval(`
+        await Promise.all(['x1', 'x2', 'x3', 'x4'].map((k) => updateMru((m) => { m[k] = 1; })));
+        const { mru } = await chrome.storage.session.get('mru');
+        const n = ['x1', 'x2', 'x3', 'x4'].filter((k) => k in mru).length;
+        await updateMru((m) => { for (const k of ['x1', 'x2', 'x3', 'x4']) delete m[k]; });
+        return n;`);
+      assert(kept === 4, `only ${kept} of 4 updates kept`);
+    });
+
     // Attach to page A with a listener for the extension's isolated world.
     async function attach(suffix) {
       const t = await waitFor(() => findTarget((t) => t.type === 'page' && t.url.endsWith(suffix)), { message: `tab ${suffix}` });

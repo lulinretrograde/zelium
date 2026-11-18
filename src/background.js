@@ -77,27 +77,33 @@ chrome.runtime.onStartup?.addListener(refreshActionTitle);
 // older builds and some forks don't, so keep our own record as a fallback.
 // ---------------------------------------------------------------------------
 
-chrome.tabs.onActivated.addListener(async ({ tabId }) => {
-  try {
-    const { mru = {} } = await chrome.storage.session.get('mru');
-    mru[tabId] = Date.now();
-    await chrome.storage.session.set({ mru });
-  } catch {
-    /* ignore */
-  }
-});
+// Read-modify-write on storage: queue the updates, or two quick tab switches
+// read the same record and the second write drops the first one's change.
+let mruQueue = Promise.resolve();
+function updateMru(change) {
+  mruQueue = mruQueue
+    .then(async () => {
+      const { mru = {} } = await chrome.storage.session.get('mru');
+      if (change(mru) !== false) await chrome.storage.session.set({ mru });
+    })
+    .catch(() => {
+      /* ignore */
+    });
+  return mruQueue;
+}
 
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  try {
-    const { mru = {} } = await chrome.storage.session.get('mru');
-    if (tabId in mru) {
-      delete mru[tabId];
-      await chrome.storage.session.set({ mru });
-    }
-  } catch {
-    /* ignore */
-  }
-});
+chrome.tabs.onActivated.addListener(({ tabId }) =>
+  updateMru((mru) => {
+    mru[tabId] = Date.now();
+  }),
+);
+
+chrome.tabs.onRemoved.addListener((tabId) =>
+  updateMru((mru) => {
+    if (!(tabId in mru)) return false;
+    delete mru[tabId];
+  }),
+);
 
 chrome.windows.onRemoved.addListener(async (windowId) => {
   if ((await getFallbackWindowId()) === windowId) await setFallbackWindowId(null);
