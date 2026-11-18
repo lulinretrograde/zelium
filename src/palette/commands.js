@@ -21,13 +21,17 @@
     { id: 'ai.kimi', name: 'Kimi', aliases: ['kimi'], keywords: 'ai moonshot assistant llm', url: 'https://www.kimi.com/' },
   ];
 
-  /** "claude how do bangs work" → { ai, text }; null unless an alias + message. */
-  function parseAsk(query) {
-    const m = /^\s*([a-z]+)[\s:]+(\S[\s\S]*)$/i.exec(query);
-    if (!m) return null;
+  /**
+   * "claude how do bangs work" / "claude: how…" → { ai, text }; null unless an
+   * alias + message. With `requireColon` (the main search), only "claude: …"
+   * counts, so searches like "claude code docs" stay searches.
+   */
+  function parseAsk(query, { requireColon = false } = {}) {
+    const m = /^\s*([a-z]+)(\s*:\s*|\s+)(\S[\s\S]*)$/i.exec(query);
+    if (!m || (requireColon && !m[2].includes(':'))) return null;
     const alias = m[1].toLowerCase();
     const ai = AI.find((a) => a.aliases.includes(alias));
-    return ai ? { ai, text: m[2].trim() } : null;
+    return ai ? { ai, text: m[3].trim() } : null;
   }
 
   const COMMANDS = [

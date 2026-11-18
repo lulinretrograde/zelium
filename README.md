@@ -30,8 +30,8 @@ search the web.
   - A bang with no query (`!w` then <kbd>↵</kbd>) opens the site itself.
   - AI bangs are labelled. The list ships with the extension and loads the first time you type `!`,
     so there are no network requests. Run `npm run bangs` to refresh it.
-- **Ask an AI:** type `claude <message>`, `gpt <message>`, `gemini …`, `deepseek …` or `kimi …`
-  and press <kbd>↵</kbd>. Zelium opens a new chat, types the message in and sends it. Or pick
+- **Ask an AI:** type `claude: <message>`, `gpt: <message>`, `gemini: …`, `deepseek: …` or `kimi: …`
+  and press <kbd>↵</kbd> (in `>` mode the colon is optional; without it, the main search just searches). Zelium opens a new chat, types the message in and sends it. Or pick
   *New Claude Chat* (etc.) and press <kbd>Tab</kbd> to write the message. You need to be signed in to
   the service; if Zelium can't find the message box (a sign-in page, or the site changed its layout), the new chat just stays open.
 - **Calculator:** `2*(3+4)`, `sqrt(2)^2`, `2*pi`. <kbd>↵</kbd> copies the result.

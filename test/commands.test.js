@@ -22,6 +22,16 @@ test('parseAsk: needs a whole-word alias and a message', () => {
   assert.equal(parseAsk('github zelium'), null);
 });
 
+test('parseAsk: requireColon only accepts "alias: message"', () => {
+  const strict = { requireColon: true };
+  assert.equal(parseAsk('claude code hooks docs', strict), null);
+  assert.equal(parseAsk('gemini api pricing', strict), null);
+  assert.equal(parseAsk('claude: what is MV3', strict).text, 'what is MV3');
+  assert.equal(parseAsk('gpt:hi', strict).ai.id, 'ai.chatgpt');
+  assert.equal(parseAsk('Kimi : 你好', strict).text, '你好');
+  assert.equal(parseAsk('claude code hooks docs').text, 'code hooks docs');
+});
+
 test('every AI service has a command with an https url', () => {
   for (const a of AI) {
     const cmd = COMMANDS.find((c) => c.id === a.id);

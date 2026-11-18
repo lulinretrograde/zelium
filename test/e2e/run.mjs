@@ -456,10 +456,16 @@ async function main() {
       await swEval(`await chrome.tabs.remove(${id})`);
     });
 
-    await test('"claude <message>" offers to ask Claude; Tab on the command starts one', async () => {
+    await test('"claude: <message>" offers to ask Claude; Tab on the command starts one', async () => {
       await closeOn(a);
       await openOn('a', a);
+      // Without the colon it's an ordinary search in the main box.
       await a.send('Input.insertText', { text: 'claude what is MV3' });
+      await waitFor(() => a.palette(`p.query === 'claude what is MV3' && p.rows.length > 0`), { message: 'results' });
+      assert(!(await a.palette(`p.rows.some((r) => r.kind === 'ask')`)), 'bare "claude …" offered to ask in the main search');
+      await closeOn(a);
+      await openOn('a', a);
+      await a.send('Input.insertText', { text: 'claude: what is MV3' });
       const row = await waitFor(() => a.palette(`p.rows[0]?.kind === 'ask' && p.rows[0]`), { message: 'ask row' });
       assert(row.data.ai.id === 'ai.claude' && row.data.text === 'what is MV3', JSON.stringify(row.data));
       await closeOn(a);

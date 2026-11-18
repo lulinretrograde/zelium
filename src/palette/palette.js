@@ -424,9 +424,9 @@
       this.setMode(MODE_ORDER[(i + dir + MODE_ORDER.length) % MODE_ORDER.length]);
     }
 
-    /** Tab on "New Claude Chat" → "claude " so the message can be typed. */
+    /** Tab on "New Claude Chat" → "claude " (">" mode) or "claude: " (main search) to type the message. */
     completeAsk(ai) {
-      this.input.value = `${ai.aliases[0]} `;
+      this.input.value = this.mode === 'all' ? `${ai.aliases[0]}: ` : `${ai.aliases[0]} `;
       this.onInput();
     }
 
@@ -575,7 +575,8 @@
       }
 
       const top = [];
-      const ask = C.parseAsk(q);
+      // Mixed results: only an explicit "claude: …" asks, so "claude code docs" still searches.
+      const ask = C.parseAsk(q, { requireColon: true });
       if (ask) top.push(this.askRow(ask));
       const calc = P.calculate(q);
       if (calc) {
