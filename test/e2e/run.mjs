@@ -441,6 +441,24 @@ async function main() {
       await swEval(`await chrome.tabs.update(${tabIds.a}, { pinned: false })`);
     });
 
+    await test('bookmarklets stay open with a message instead of failing silently', async () => {
+      const id = await swEval(`return (await chrome.bookmarks.create({ title: 'Zelium Bookmarklet', url: 'javascript:void(0)' })).id`);
+      try {
+        await a.send('Page.bringToFront');
+        await openOn('a', a);
+        await waitFor(() => a.palette(`p.snapshot.bookmarks.some((b) => b.id === ${JSON.stringify(id)})`), { message: 'fresh snapshot' });
+        await a.send('Input.insertText', { text: '#zelium bookmarklet' });
+        const row = await waitFor(() => a.palette(`p.rows[0]?.kind === 'bookmark' && p.rows[0]`), { message: 'bookmarklet row' });
+        assert(row.sub === 'bookmarklet', `sub ${row.sub}`);
+        await press(a, 'Enter');
+        await waitFor(() => a.palette(`p.footRight.textContent.includes('Bookmarklets')`), { message: 'bookmarklet message' });
+        assert(await a.palette('p.isOpen'), 'palette closed');
+        await closeOn(a);
+      } finally {
+        await swEval(`await chrome.bookmarks.remove(${JSON.stringify(id)})`);
+      }
+    });
+
     await test('> AI command opens a new Claude chat in a new tab', async () => {
       await a.send('Page.bringToFront');
       await openOn('a', a);

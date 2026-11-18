@@ -92,6 +92,11 @@
     return perChar * q.replace(/\s+/g, '').length;
   }
 
+  const isBookmarklet = (url) => /^s*javascript:/i.test(url || '');
+
+  /** How long an action may take before the palette closes without waiting for it. */
+  const QUICK_RESULT_MS = 400;
+
   function lastSegment(path) {
     if (!path) return '';
     const parts = path.split(' / ');
@@ -653,14 +658,16 @@
     }
 
     bookmarkRow(b, hl) {
+      const bookmarklet = isBookmarklet(b.url);
       return {
         key: `bookmark:${b.id}`,
         kind: 'bookmark',
-        fav: b.url,
+        fav: bookmarklet ? null : b.url,
+        icon: bookmarklet ? 'command' : undefined,
         title: b.title,
         titleHl: hl?.[0],
-        sub: P.displayUrl(b.url),
-        subHl: hl?.[1],
+        sub: bookmarklet ? 'bookmarklet' : P.displayUrl(b.url),
+        subHl: bookmarklet ? undefined : hl?.[1],
         meta: lastSegment(b.folder),
         url: b.url,
         data: b,
@@ -876,6 +883,11 @@
         case 'search':
           return this.dispatch('search', { text: this.query.trim(), disposition });
         case 'bookmark':
+          if (isBookmarklet(row.url)) {
+            this.renderFootRight("Bookmarklets can't run from Zelium: use the bookmarks bar");
+            return;
+          }
+          return this.dispatch('open', { url: row.url, disposition });
         case 'history':
         case 'url':
         case 'bangSearch':
@@ -883,18 +895,27 @@
       }
     }
 
-    /** Send an action to the background and close the palette. */
+    /**
+     * Send an action to the background and close the palette. Most actions
+     * answer within a few ms, so wait briefly and keep the palette open with
+     * the error if one fails; slow ones (an AI chat typing its message) close
+     * right away. The fallback window waits for the whole action.
+     */
     async dispatch(type, data) {
-      const pending = this.send(type, data);
-      if (!this.fallback) this.close();
-      try {
-        await pending;
-      } catch (err) {
-        if (this.fallback && this.isOpen) this.renderFootRight(`Error: ${err.message}`);
+      const pending = this.send(type, data).then(
+        () => null,
+        (err) => err,
+      );
+      const err = this.fallback
+        ? await pending
+        : await Promise.race([pending, new Promise((r) => setTimeout(() => r(null), QUICK_RESULT_MS))]);
+      if (err) {
+        if (this.isOpen) this.renderFootRight(`Error: ${err.message}`);
         else console.warn('[Zelium]', err);
         return;
       }
-      if (this.fallback) this.close();
+      this.close();
+      if (!this.fallback) pending.then((late) => late && console.warn('[Zelium]', late));
     }
 
     async runLocalCommand(id) {
