@@ -336,6 +336,18 @@
     return s;
   }
 
+  /**
+   * Dates, phone numbers and codes that happen to parse as arithmetic:
+   * "2026-11-18", "10/12/2024", "1-800-555-1234" (three or more digit groups
+   * joined by - or /, no spaces), and groups with a leading zero ("0171-12345",
+   * "09/2025"). "100-25" or "10 - 3 - 2" still calculate.
+   */
+  function looksLikeDateOrNumberCode(text) {
+    if (!/^\d+([-/]\d+)+$/.test(text)) return false;
+    const groups = text.split(/[-/]/);
+    return groups.length >= 3 || groups.some((g) => g.length > 1 && g[0] === '0');
+  }
+
   /** @returns {{expr:string, value:number, display:string}|null} */
   function calculate(input) {
     const text = input.trim().replace(/=$/, '').trim();
@@ -343,6 +355,7 @@
     // Needs an operator or a function call — a bare number is not a calculation.
     if (!/[+\-*/%^×÷()]/.test(text.replace(/^[-+]/, ''))) return null;
     if (/^[\d.]+$/.test(text)) return null;
+    if (looksLikeDateOrNumberCode(text)) return null;
     try {
       const value = evaluate(text);
       if (!Number.isFinite(value)) return null;

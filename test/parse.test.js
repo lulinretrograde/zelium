@@ -42,6 +42,18 @@ test('calculate: ignores non-math input', () => {
   assert.equal(calculate('foo(2)'), null);
 });
 
+test('calculate: dates and phone numbers are not maths', () => {
+  assert.equal(calculate('2026-11-18'), null);
+  assert.equal(calculate('10/12/2024'), null);
+  assert.equal(calculate('1-800-555-1234'), null);
+  assert.equal(calculate('0171-123456'), null);
+  assert.equal(calculate('09/2025'), null);
+  // Still arithmetic:
+  assert.equal(calculate('100-25').value, 75);
+  assert.equal(calculate('10/4').value, 2.5);
+  assert.equal(calculate('10 - 3 - 2').value, 5);
+});
+
 test('built-in bangs work before the full list loads', () => {
   const a = parseBang('!yt lofi beats');
   assert.equal(a.kind, 'search');
