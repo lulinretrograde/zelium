@@ -21,6 +21,16 @@ test('detectUrl: rejects plain words, sentences, unknown TLDs, javascript:', () 
   assert.equal(detectUrl('javascript:alert(1)'), null);
 });
 
+test('detectUrl: mailto/tel, unlisted TLDs with a port or path', () => {
+  assert.equal(detectUrl('mailto:someone@example.com'), 'mailto:someone@example.com');
+  assert.equal(detectUrl('tel:+1-555-0100'), 'tel:+1-555-0100');
+  assert.equal(detectUrl('my.example.berlin/path'), 'https://my.example.berlin/path');
+  assert.equal(detectUrl('intranet.corp:8080'), 'https://intranet.corp:8080');
+  assert.equal(detectUrl('readme.md'), null);
+  assert.equal(detectUrl('readme.md/'), null);
+  assert.equal(detectUrl('mailto:'), null);
+});
+
 test('calculate: arithmetic, precedence, functions, constants', () => {
   assert.equal(calculate('2*(3+4)').value, 14);
   assert.equal(calculate('2+3*4').value, 14);

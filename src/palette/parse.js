@@ -173,8 +173,8 @@
       'com net org io dev app ai co me so sh gg xyz info biz edu gov mil int tv fm ly to cc ' +
       'de at ch uk us ca au nz fr nl be lu es pt it se no dk fi is pl cz sk hu ro bg gr tr ru ua ' +
       'jp cn kr in sg hk tw br mx ar cl za eu page site online tech store blog cloud codes ' +
-      'zone wiki news live email design studio space works today run sh lol ninja rocks ' +
-      'rs gl ms vc im ee lt lv si hr ws nu pw sk ie il ir id th vn my ph pk ng ke eg ma ' +
+      'zone wiki news live email design studio space works today run lol ninja rocks ' +
+      'rs gl ms vc im ee lt lv si hr ws nu pw ie il ir id th vn my ph pk ng ke eg ma ' +
       'link click top fun club shop website network systems tools social media ' +
       'local localhost internal test onion arpa'
     ).split(/\s+/),
@@ -188,6 +188,7 @@
 
     // Explicit scheme
     if (/^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(text)) return text;
+    if (/^(mailto:[^@\s]+@\S+|tel:\+?[\d().-]+)$/i.test(text)) return text;
     if (/^(about|chrome|helium):[\w/-]+$/i.test(text)) return text.replace(/^helium:(?!\/\/)/i, 'chrome://');
 
     // localhost / IPv4 with optional port & path
@@ -196,6 +197,9 @@
     // domain.tld[:port][/path]
     const m = /^((?:[a-z0-9\p{L}](?:[a-z0-9\p{L}-]*[a-z0-9\p{L}])?\.)+)([a-z\p{L}]{2,})(:\d{1,5})?([/?#]\S*)?$/iu.exec(text);
     if (m && TLDS.has(m[2].toLowerCase())) return `https://${text}`;
+    // Unlisted TLDs ("my.example.berlin/path", "intranet.corp:8080") count once
+    // there's a port or a path; a bare "readme.md" or "script.js" stays a search.
+    if (m && (m[3] || (m[4] && m[4].length > 1))) return `https://${text}`;
 
     return null;
   }
