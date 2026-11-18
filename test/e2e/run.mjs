@@ -429,6 +429,16 @@ async function main() {
       await closeOn(a);
     });
 
+    await test('pasted "/r/rust" stays a query instead of switching to history', async () => {
+      await a.send('Page.bringToFront');
+      await openOn('a', a);
+      await a.palette(`(p.input.value = '/r/rust', p.input.dispatchEvent(new InputEvent('input', { inputType: 'insertFromPaste' })), true)`);
+      await a.send('Input.insertText', { text: 'x' });
+      const state = await waitFor(() => a.palette(`p.query === '/r/rustx' && { mode: p.mode, query: p.query }`), { message: 'query' });
+      assert(state.mode === 'all', `mode ${state.mode}`);
+      await closeOn(a);
+    });
+
     await test('> command mode runs a command (Pin Tab)', async () => {
       await a.send('Page.bringToFront');
       await openOn('a', a);

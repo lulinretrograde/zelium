@@ -188,7 +188,7 @@
       this.root.append(wrap);
       this.wrap = wrap;
 
-      this.input.addEventListener('input', () => this.onInput());
+      this.input.addEventListener('input', (e) => this.onInput(e));
       this.input.addEventListener('keydown', (e) => this.onKey(e));
       this.list.addEventListener('mousedown', (e) => e.preventDefault());
       this.list.addEventListener('mousemove', (e) => this.onPointer(e));
@@ -341,9 +341,12 @@
       this.renderFootLeft();
     }
 
-    onInput() {
+    onInput(e) {
       let value = this.input.value;
-      if (this.mode === 'all' && PREFIX_TO_MODE[value[0]]) {
+      // A prefix typed into the empty box switches modes; pasted or dropped
+      // text ("/r/rust", "#tag", "@user") is a query, also as you keep typing.
+      const pasted = e?.inputType === 'insertFromPaste' || e?.inputType === 'insertFromDrop';
+      if (this.mode === 'all' && this.query === '' && PREFIX_TO_MODE[value[0]] && !pasted) {
         const mode = PREFIX_TO_MODE[value[0]];
         value = value.slice(1);
         this.input.value = value;
