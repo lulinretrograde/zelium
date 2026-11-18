@@ -333,6 +333,7 @@ function slimTab(t) {
     muted: !!t.mutedInfo?.muted,
     active: t.active,
     lastAccessed: t.lastAccessed ?? 0,
+    incognito: !!t.incognito,
   };
 }
 

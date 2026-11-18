@@ -45,6 +45,10 @@ search the web.
   - new window or incognito window; zoom in, out or reset
   - start a new Claude, ChatGPT, Gemini, DeepSeek or Kimi chat (opens in a new tab)
   - open History, Downloads, Bookmarks, Extensions, Settings or the shortcut settings
+- **Learns what you pick.** A result you choose for a query ranks higher the next time you type it,
+  and becomes the top hit in the main search. It fades after a couple of weeks of not picking it,
+  stays in your browser (`chrome.storage.local`), skips incognito tabs, and `> Clear Learned Results`
+  resets it.
 - **With an empty input** the palette shows your most recently used tabs and recently closed tabs.
 - **Works everywhere.** On pages extensions can't touch (`chrome://`, the new tab page, the Web Store,
   PDFs), Zelium opens the same palette in a small centred popup window instead.
@@ -159,7 +163,7 @@ src/
 | `sessions` | recently closed tabs, reopen |
 | `search` | search with your default engine |
 | `favicon` | show site icons |
-| `storage` | remember the fallback window between service-worker restarts |
+| `storage` | your settings, learned picks, and the fallback window between service-worker restarts |
 | `claude.ai`, `chatgpt.com`, `gemini.google.com`, `chat.deepseek.com`, `kimi.com` | type and send your message in a new AI chat (only in the tab Zelium just opened, and only when you used *Ask …*) |
 
 ## Development

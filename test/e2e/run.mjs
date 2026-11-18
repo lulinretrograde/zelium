@@ -557,6 +557,39 @@ async function main() {
       await closeOn(a);
     });
 
+    await test('learns from picks: a chosen result ranks first next time; Clear Learned Results', async () => {
+      const openWith = async (text) => {
+        await a.send('Page.bringToFront');
+        await openOn('a', a);
+        await a.palette('(p.copyText = async () => true, true)');
+        await waitFor(() => a.palette('p.prefsReady?.then(() => true)'), { message: 'settings and picks loaded' });
+        await a.send('Input.insertText', { text });
+      };
+      await openWith('>copy');
+      const idx = await waitFor(() => a.palette(`(() => { const i = p.rows.findIndex((r) => r.data?.id === 'copy.title'); return i > 0 && i; })()`), {
+        message: 'Copy Page Title below the first row',
+      });
+      await a.palette(`(p.select(${idx}, true), true)`);
+      await press(a, 'Enter');
+      await waitFor(async () => !(await a.overlayShown()), { message: 'palette closed' });
+
+      await openWith('>copy');
+      await waitFor(() => a.palette(`p.rows[0]?.data?.id === 'copy.title'`), { message: 'learned command first in > mode' });
+      await closeOn(a);
+      await openWith('copy');
+      await waitFor(() => a.palette(`p.rows[0]?.data?.id === 'copy.title'`), { message: 'top hit in the main search' });
+      await closeOn(a);
+
+      await openWith('>clear learned');
+      await waitFor(() => a.palette(`p.rows[0]?.data?.id === 'learn.clear'`), { message: 'Clear Learned Results' });
+      await press(a, 'Enter');
+      await waitFor(async () => !(await swEval(`return (await chrome.storage.local.get('picks')).picks`)), { message: 'picks cleared' });
+      await waitFor(async () => !(await a.overlayShown()), { message: 'palette closed' });
+      await openWith('>copy');
+      await waitFor(() => a.palette(`p.rows[0]?.data?.id === 'copy.url'`), { message: 'default order again' });
+      await closeOn(a);
+    });
+
     await test('> AI command opens a new Claude chat in a new tab', async () => {
       await a.send('Page.bringToFront');
       await openOn('a', a);

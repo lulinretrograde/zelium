@@ -81,6 +81,8 @@
     { id: 'page.extensions', title: 'Open Extensions', keywords: 'chrome page addons plugins', icon: 'grid', group: 'Open' },
     { id: 'page.settings', title: 'Open Settings', keywords: 'chrome page preferences', icon: 'settings', group: 'Open' },
     { id: 'page.shortcuts', title: 'Change Zelium Shortcut', keywords: 'keyboard hotkey keybinding', icon: 'keyboard', group: 'Open' },
+
+    { id: 'learn.clear', title: 'Clear Learned Results', keywords: 'forget reset ranking picks frecency', icon: 'close', local: true, group: 'Zelium' },
   ];
 
   const resolve = (v, tab) => (typeof v === 'function' ? v(tab) : v);

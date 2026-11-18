@@ -5,7 +5,7 @@
  */
 (() => {
   const Z = (globalThis.Zelium ??= {});
-  const { fuzzy: F, parse: P, icons: I, commands: C } = Z;
+  const { fuzzy: F, parse: P, icons: I, commands: C, learn: L, settings: S } = Z;
 
   // macOS uses ⌘; Windows, Linux and ChromeOS use Ctrl.
   const IS_MAC = /mac/i.test(navigator.userAgentData?.platform || navigator.platform || '');
@@ -135,6 +135,9 @@
       this.sel = 0;
       this.isOpen = false;
       this.lastPointer = null;
+      this.settings = S.normalize(null);
+      this.picks = {};
+      this.learned = new Map();
 
       this.build();
     }
@@ -303,6 +306,12 @@
       // Render the previous snapshot immediately (if any), then refresh.
       this.update();
       this.focus();
+      // Settings and learned picks are local and quick; re-rank once they're in.
+      this.prefsReady = Promise.all([S.load(), L.load()]).then(([settings, picks]) => {
+        this.settings = settings;
+        this.picks = picks;
+        if (this.isOpen) this.update({ keepSel: true });
+      });
       this.snapshotReady = this.send('snapshot');
       try {
         this.snapshot = await this.snapshotReady;
@@ -603,6 +612,7 @@
     compute() {
       const q = this.query.trim();
       if (this.view) return [{ title: null, rows: this.viewRows(q) }];
+      this.learned = this.settings.learn ? L.boosts(this.picks, q) : new Map();
       switch (this.mode) {
         case 'tabs':
           return [{ title: q ? 'Tabs' : 'Open tabs', rows: this.tabRows(q, LIMITS.mode) }];
@@ -682,6 +692,8 @@
       const history = this.historyRows(q, LIMITS.all.history, seen);
       const minScore = minScoreFor(q, 7);
       const commands = this.commandRows(q, LIMITS.all.commands, minScore);
+      const hit = this.takeTopHit([tabs, bookmarks, history, commands]);
+      if (hit) top.push(hit);
       const search = {
         key: 'search',
         kind: 'search',
@@ -699,6 +711,32 @@
         { title: 'Commands', rows: commands },
         { title: 'Web', rows: [search] },
       ];
+    }
+
+    /** Learned boost for a row's item (0 if never picked for this query). */
+    learnedFor(key) {
+      return this.learned.get(key) ?? 0;
+    }
+
+    /** Move the result you usually pick for this query to the top, out of its section. */
+    takeTopHit(lists) {
+      let best = null;
+      for (const list of lists) {
+        for (let i = 0; i < list.length; i++) {
+          const b = this.learnedFor(L.keyFor(list[i]));
+          if (b >= L.TOP_HIT && (!best || b > best.b)) best = { list, i, b };
+        }
+      }
+      return best ? best.list.splice(best.i, 1)[0] : null;
+    }
+
+    /** Remember what was picked for the current query. */
+    learnPick(row) {
+      if (!this.settings.learn || this.view || this.snapshot.current?.incognito) return;
+      const key = L.keyFor(row);
+      if (!key || !this.query.trim()) return;
+      this.picks = L.record(this.picks, this.query, key);
+      L.save(this.picks).catch(() => {});
     }
 
     /** Mixed "all" results need tighter matches than a dedicated mode. */
@@ -737,7 +775,7 @@
         weights: [1, 0.85],
         limit,
         minScore: minScoreFor(q, this.strictness()),
-        boost: (t) => recencyBoost(t.lastAccessed),
+        boost: (t) => recencyBoost(t.lastAccessed) + this.learnedFor(`url:${t.url}`),
       }).map((r) => this.tabRow(r.item, r.hl));
     }
 
@@ -765,6 +803,7 @@
       }
       return F.rank(q, bms, (b) => [b.title, P.displayUrl(b.url), b.folder], {
         weights: [1, 0.8, 0.5],
+        boost: (b) => this.learnedFor(`url:${b.url}`),
         limit,
         minScore: minScoreFor(q, this.strictness()),
       }).map((r) => this.bookmarkRow(r.item, r.hl));
@@ -806,7 +845,7 @@
         weights: [1, 0.85],
         limit,
         minScore: minScoreFor(q, this.strictness()),
-        boost: (i) => Math.log2(1 + i.visitCount) * 0.8 + recencyBoost(i.lastVisitTime),
+        boost: (i) => Math.log2(1 + i.visitCount) * 0.8 + recencyBoost(i.lastVisitTime) + this.learnedFor(`url:${i.url}`),
       }).map((r) => this.historyRow(r.item, r.hl));
     }
 
@@ -856,6 +895,7 @@
         weights: [1, 0.6, 0.4],
         limit,
         minScore: minScore ?? minScoreFor(q, 4),
+        boost: (c) => this.learnedFor(`command:${c.id}`),
       }).map((r) => this.commandRow(r.item, r.hl));
     }
 
@@ -937,6 +977,7 @@
 
     async activate(row, disposition = 'current') {
       if (!row) return;
+      this.learnPick(row);
       switch (row.kind) {
         case 'action':
           return row.data.run(disposition);
@@ -1020,6 +1061,13 @@
         return;
       }
       const { url, title } = tab;
+      if (id === 'learn.clear') {
+        await L.clear();
+        this.picks = {};
+        this.renderFootRight('Cleared learned results');
+        this.closeSoon();
+        return;
+      }
       if (id === 'copy.url') return this.copyAndClose(url, 'Copied URL');
       if (id === 'copy.title') return this.copyAndClose(title, 'Copied title');
       if (id === 'bookmark.toggle') {
