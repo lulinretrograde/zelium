@@ -11,6 +11,9 @@
   const IS_MAC = /mac/i.test(navigator.userAgentData?.platform || navigator.platform || '');
   const MOD = IS_MAC ? '⌘' : 'Ctrl+';
   const REMOVE_KEYS = IS_MAC ? '⌘⌫' : 'Ctrl+⇧⌫';
+  const ACTIONS_KEYS = `${MOD}.`;
+  // Row kinds that have an actions menu (⌘. / Ctrl+.).
+  const HAS_ACTIONS = new Set(['tab', 'history', 'bookmark', 'closed', 'url', 'bangSearch']);
 
   const MODES = {
     all: { prefix: '', label: '', placeholder: 'Search tabs, bookmarks, history or the web…' },
@@ -197,6 +200,13 @@
         const i = this.rowIndexFromEvent(e);
         if (i != null) this.activate(this.rows[i], this.dispositionFrom(e));
       });
+      this.list.addEventListener('contextmenu', (e) => {
+        const i = this.rowIndexFromEvent(e);
+        if (i == null) return;
+        e.preventDefault();
+        this.select(i, false);
+        this.openActions(this.rows[i]);
+      });
       this.list.addEventListener('auxclick', (e) => {
         if (e.button !== 1) return;
         const i = this.rowIndexFromEvent(e);
@@ -268,6 +278,7 @@
           keys.push(['↵', 'select']);
           break;
       }
+      if (HAS_ACTIONS.has(row?.kind)) keys.push([ACTIONS_KEYS, 'actions']);
       keys.push(['esc', this.view ? 'back' : 'close']);
       for (const [k, label] of keys) {
         const hint = h('span', 'z-hint');
@@ -484,6 +495,7 @@
         if (row?.kind === 'command' && row.data.ai && !e.shiftKey) return act(() => this.completeAsk(row.data.ai));
         return act(() => this.cycleMode(e.shiftKey ? -1 : 1));
       }
+      if (mod && key === '.' && !this.view) return act(() => this.openActions(row));
       if (key === 'Backspace' && mod && (IS_MAC || e.shiftKey) && (row?.kind === 'tab' || row?.kind === 'history')) {
         return act(() => this.removeRow(row));
       }
@@ -1022,6 +1034,81 @@
         const format = id === 'copy.windowMarkdown' ? 'markdown' : 'urls';
         return this.copyAndClose(P.formatTabList(tabs, format), `Copied ${tabs.length} tab${tabs.length === 1 ? '' : 's'}`);
       }
+    }
+
+    // ----- actions menu --------------------------------------------------------
+
+    /** The actions menu for a result row (⌘. / Ctrl+. or right-click). */
+    openActions(row) {
+      const items = row && HAS_ACTIONS.has(row.kind) ? this.actionsFor(row) : null;
+      if (!items?.length) {
+        this.renderFootRight('No actions for this row');
+        return;
+      }
+      this.pushView({ title: 'Actions', placeholder: `Actions for ${row.title || row.url}`, items });
+    }
+
+    /** What can be done with a row, in the order shown. */
+    actionsFor(row) {
+      const a = (id, title, icon, run, meta) => ({ id, title, icon, run, meta });
+      const url = row.url ?? row.data?.url;
+      const title = row.data?.title ?? row.title;
+      const isMark = row.kind === 'bookmark';
+      const bookmarklet = isBookmarklet(url);
+      const bookmarked = isMark || (url && this.snapshot.bookmarks.some((b) => b.url === url));
+      const open = (disposition) => () => this.activate(row, disposition);
+      const out = [];
+
+      if (row.kind === 'tab') {
+        const t = row.data;
+        const cmd = (id, done) => () => this.dispatch('command', { id, targetTabId: t.id }, { done });
+        out.push(
+          a('switch', 'Switch to Tab', 'tab', open('current'), '↵'),
+          a('window', 'Move to New Window', 'moveWindow', open('newWindow'), '⇧↵'),
+          a('close', 'Close Tab', 'close', () => (this.popView(), this.removeRow(row)), REMOVE_KEYS),
+          a('pin', t.pinned ? 'Unpin Tab' : 'Pin Tab', 'pin', cmd('tab.togglePin', t.pinned ? 'Unpinned' : 'Pinned')),
+          a('mute', t.muted ? 'Unmute Tab' : 'Mute Tab', t.muted ? 'volume' : 'mute', cmd('tab.toggleMute', t.muted ? 'Unmuted' : 'Muted')),
+          a('reload', 'Reload Tab', 'reload', cmd('tab.reload', 'Reloaded')),
+          a('duplicate', 'Duplicate Tab', 'copy', cmd('tab.duplicate')),
+        );
+      } else if (row.kind === 'closed') {
+        out.push(a('restore', 'Restore', 'restore', open('current'), '↵'));
+      } else if (!bookmarklet) {
+        out.push(
+          a('open', 'Open', 'link', open('current'), '↵'),
+          a('newTab', 'Open in New Tab', 'plus', open('newTab'), `${MOD}↵`),
+          a('newWindow', 'Open in New Window', 'window', open('newWindow'), '⇧↵'),
+        );
+      }
+
+      if (url && !(row.kind === 'closed' && row.data.isWindow)) {
+        out.push(
+          a('copyUrl', bookmarklet ? 'Copy Bookmarklet Code' : 'Copy URL', 'copy', () => this.copyAndClose(url, 'Copied')),
+          a('copyMarkdown', 'Copy as Markdown Link', 'markdown', () => this.copyAndClose(P.markdownLink(title, url), 'Copied Markdown link')),
+        );
+      }
+
+      if (isMark) {
+        const b = row.data;
+        out.push(
+          a('move', 'Move Bookmark to Folder…', 'bookmark', () => this.pickBookmarkFolder({ url, title, id: b.id }, true)),
+          a('unbookmark', 'Remove Bookmark', 'close', () => this.dispatch('bookmarkRemove', { id: b.id }, { done: 'Removed bookmark' })),
+        );
+      } else if (url && /^(https?|ftp|file):/i.test(url) && row.kind !== 'closed') {
+        out.push(
+          bookmarked
+            ? a('unbookmark', 'Remove Bookmark', 'bookmark', () => this.dispatch('bookmarkRemove', { url }, { done: 'Removed bookmark' }))
+            : a('bookmark', 'Bookmark', 'bookmark', () => this.dispatch('bookmarkSet', { url, title }, { done: 'Bookmarked' })),
+          a('folder', bookmarked ? 'Move Bookmark to Folder…' : 'Bookmark in Folder…', 'bookmark', () =>
+            this.pickBookmarkFolder({ url, title }, bookmarked),
+          ),
+        );
+      }
+
+      if (row.kind === 'history') {
+        out.push(a('forget', 'Remove from History', 'close', () => (this.popView(), this.removeRow(row)), REMOVE_KEYS));
+      }
+      return out;
     }
 
     /** Folder picker: bookmark `page` there, or move its existing bookmark. */

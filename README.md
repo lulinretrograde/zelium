@@ -98,6 +98,7 @@ Browser-specific details are handled automatically:
 | <kbd>⇧↵</kbd> | open in a new window (or move the selected tab to one) |
 | <kbd>⌘⌫</kbd> / <kbd>Ctrl+⇧+⌫</kbd> | close the selected tab, or remove the selected history entry |
 | <kbd>⌘C</kbd> (no text selected) | copy the selected row's URL |
+| <kbd>⌘.</kbd> / <kbd>Ctrl+.</kbd> (or right-click) | actions for the selected row: pin, mute, reload, copy, bookmark, move to a folder, forget… |
 | <kbd>Tab</kbd> / <kbd>⇧Tab</kbd> | next / previous mode (or complete a `!bang`, or start a message on an AI chat command) |
 | <kbd>Esc</kbd> | close |
 

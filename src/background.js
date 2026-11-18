@@ -296,18 +296,21 @@ async function handle(msg, sender) {
       return true;
 
     case 'zelium:bookmarkSet':
-      return setBookmark(msg.url, msg.title, msg.parentId);
+      return setBookmark(msg.url, msg.title, msg.parentId, msg.id);
 
     case 'zelium:bookmarkRemove':
-      return removeBookmarks(msg.url);
+      return removeBookmarks(msg.url, msg.id);
 
     case 'zelium:deleteHistory':
       await chrome.history.deleteUrl({ url: msg.url });
       return true;
 
-    case 'zelium:command':
-      await prepareAction(msg, ctx);
-      return runCommand(msg.id, ctx);
+    case 'zelium:command': {
+      // From the actions menu, a tab command can target any tab, not just the current one.
+      const target = msg.targetTabId != null ? await chrome.tabs.get(msg.targetTabId) : ctx;
+      await prepareAction(msg, ctx); // keep the user's window focused
+      return runCommand(msg.id, target);
+    }
 
     default:
       throw new Error(`Unknown message ${msg.type}`);
@@ -420,8 +423,15 @@ async function snapshot(ctx) {
 // Bookmarks
 // ---------------------------------------------------------------------------
 
-/** Bookmark `url` (in `parentId`, or the browser's default folder); an existing bookmark is moved there instead. */
-async function setBookmark(url, title, parentId) {
+/**
+ * Bookmark `url` (in `parentId`, or the browser's default folder); an existing
+ * bookmark is moved there instead. With `id`, moves that bookmark.
+ */
+async function setBookmark(url, title, parentId, id) {
+  if (id) {
+    await chrome.bookmarks.move(id, { parentId });
+    return 'moved';
+  }
   assertSafeUrl(url);
   const [existing] = await chrome.bookmarks.search({ url });
   if (existing) {
@@ -432,8 +442,12 @@ async function setBookmark(url, title, parentId) {
   return 'created';
 }
 
-/** Remove every bookmark of exactly this URL. */
-async function removeBookmarks(url) {
+/** Remove the bookmark `id`, or every bookmark of exactly this URL. */
+async function removeBookmarks(url, id) {
+  if (id) {
+    await chrome.bookmarks.remove(id);
+    return 1;
+  }
   const found = await chrome.bookmarks.search({ url });
   await Promise.all(found.map((b) => chrome.bookmarks.remove(b.id)));
   return found.length;

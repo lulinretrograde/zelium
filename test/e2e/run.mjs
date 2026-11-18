@@ -189,6 +189,9 @@ async function test(name, fn) {
   }
 }
 
+// CDP modifier bits: Ctrl = 2, Meta = 4. The palette uses ⌘ on macOS, Ctrl elsewhere.
+const MOD_FOR_ACTIONS = platform() === 'darwin' ? 4 : 2;
+
 /** Real key presses that insert text (Input.insertText fires no key events). */
 async function typeChars(conn, text) {
   for (const ch of text) {
@@ -499,7 +502,9 @@ async function main() {
         await openOn('a', a);
         await waitFor(() => a.palette('p.snapshotReady && p.snapshot.current?.url === ' + JSON.stringify(url)), { message: 'snapshot' });
         await a.send('Input.insertText', { text });
-        await waitFor(() => a.palette(`p.rows[0]?.data?.id === '${id}' && p.rows[0].title`), { message: `${id} row` });
+        await waitFor(() => a.palette(`p.rows[0]?.data?.id === '${id}' && p.rows[0].title`), { message: `${id} row` }).catch(async (err) => {
+          throw new Error(`${err.message}; state ${await a.palette('JSON.stringify({ open: p.isOpen, mode: p.mode, q: p.query, rows: p.rows.slice(0, 3).map((r) => r.title) })')}`);
+        });
         await press(a, 'Enter');
       };
       try {
@@ -528,6 +533,28 @@ async function main() {
       } finally {
         await swEval(`for (const b of await chrome.bookmarks.search({ url: ${JSON.stringify(url)} })) await chrome.bookmarks.remove(b.id)`);
       }
+    });
+
+    await test('actions menu (Ctrl+.): pin another tab, Esc goes back', async () => {
+      await a.send('Page.bringToFront');
+      await openOn('a', a);
+      await a.send('Input.insertText', { text: '@beta docs' });
+      await waitFor(() => a.palette(`p.rows[0]?.kind === 'tab' && p.rows[0].title === 'Beta Docs'`), { message: 'Beta tab row' });
+      await a.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: '.', code: 'Period', windowsVirtualKeyCode: 190, modifiers: MOD_FOR_ACTIONS });
+      await a.send('Input.dispatchKeyEvent', { type: 'keyUp', key: '.', code: 'Period', windowsVirtualKeyCode: 190, modifiers: MOD_FOR_ACTIONS });
+      const titles = await waitFor(() => a.palette(`p.view?.title === 'Actions' && p.rows.map((r) => r.title)`), { message: 'actions menu' });
+      assert(titles.includes('Pin Tab') && titles.includes('Copy URL'), JSON.stringify(titles));
+      await press(a, 'Escape');
+      await waitFor(() => a.palette(`!p.view && p.query === 'beta docs' && p.isOpen`), { message: 'back to results' });
+      await a.palette(`(p.openActions(p.rows[0]), true)`);
+      await a.send('Input.insertText', { text: 'pin' });
+      await waitFor(() => a.palette(`p.rows[0]?.data?.id === 'pin'`), { message: 'Pin action' });
+      await press(a, 'Enter');
+      await waitFor(() => getTab('b').then((t) => t.pinned), { message: 'tab B pinned' });
+      const active = await swEval(`return (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0]?.id`);
+      assert(active === tabIds.a, 'the current tab changed');
+      await swEval(`await chrome.tabs.update(${tabIds.b}, { pinned: false })`);
+      await closeOn(a);
     });
 
     await test('> AI command opens a new Claude chat in a new tab', async () => {
