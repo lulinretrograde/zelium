@@ -13,7 +13,7 @@
   const REMOVE_KEYS = IS_MAC ? '⌘⌫' : 'Ctrl+⇧⌫';
   const ACTIONS_KEYS = `${MOD}.`;
   // Row kinds that have an actions menu (⌘. / Ctrl+.).
-  const HAS_ACTIONS = new Set(['tab', 'history', 'bookmark', 'closed', 'url', 'bangSearch']);
+  const HAS_ACTIONS = new Set(['tab', 'history', 'bookmark', 'closed', 'url', 'bangSearch', 'download']);
 
   const MODES = {
     all: { prefix: '', label: '', placeholder: 'Search tabs, bookmarks, history or the web…' },
@@ -21,8 +21,11 @@
     bookmarks: { prefix: '#', label: 'Bookmarks', placeholder: 'Search bookmarks…' },
     history: { prefix: '/', label: 'History', placeholder: 'Search history…' },
     commands: { prefix: '>', label: 'Commands', placeholder: 'Run a command…' },
+    downloads: { prefix: '', label: 'Downloads', placeholder: 'Search downloads…' },
   };
-  const MODE_ORDER = ['all', 'tabs', 'bookmarks', 'history', 'commands'];
+  const MODE_ORDER = ['all', 'tabs', 'bookmarks', 'history', 'commands', 'downloads'];
+  // Optional: asked for the first time you use downloads, so installing Zelium shows no warning for it.
+  const DOWNLOAD_PERMISSIONS = { permissions: ['downloads', 'downloads.open'] };
   const PREFIX_TO_MODE = { '@': 'tabs', '#': 'bookmarks', '/': 'history', '>': 'commands' };
 
   const EMPTY_SNAPSHOT = { current: null, windowCount: 1, tabs: [], bookmarks: [], folders: [], history: [], closed: [] };
@@ -99,6 +102,13 @@
 
   /** How long an action may take before the palette closes without waiting for it. */
   const QUICK_RESULT_MS = 400;
+
+  function formatBytes(n) {
+    if (!(n > 0)) return '';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
+    return `${(n / 1024 ** i).toFixed(i && n < 10 * 1024 ** i ? 1 : 0)} ${units[i]}`;
+  }
 
   const THEME_KEY = 'zelium:theme';
   const readLocal = (k) => {
@@ -298,6 +308,12 @@
         case 'action':
           keys.push(['↵', 'select']);
           break;
+        case 'download':
+          keys.push(['↵', 'open'], ['⇧↵', 'show in folder'], [REMOVE_KEYS, 'remove']);
+          break;
+        case 'permission':
+          keys.push(['↵', 'allow']);
+          break;
       }
       if (HAS_ACTIONS.has(row?.kind)) keys.push([ACTIONS_KEYS, 'actions']);
       keys.push(['esc', this.view ? 'back' : 'close']);
@@ -318,6 +334,7 @@
       this.view = null;
       this.pageSelection = selection;
       this.askPage = null; // AI id while writing an "Ask … About This Page" message
+      this.downloads = undefined; // loaded when the downloads mode opens
       this.mode = 'all';
       this.query = '';
       this.input.value = '';
@@ -379,6 +396,7 @@
     setMode(mode) {
       if (this.mode === mode) return;
       this.mode = mode;
+      if (mode === 'downloads') this.loadDownloads();
       this.applyMode();
       this.sel = 0;
       this.update();
@@ -526,7 +544,7 @@
         return act(() => this.cycleMode(e.shiftKey ? -1 : 1));
       }
       if (mod && key === '.' && !this.view) return act(() => this.openActions(row));
-      if (key === 'Backspace' && mod && (IS_MAC || e.shiftKey) && (row?.kind === 'tab' || row?.kind === 'history')) {
+      if (key === 'Backspace' && mod && (IS_MAC || e.shiftKey) && ['tab', 'history', 'download'].includes(row?.kind)) {
         return act(() => this.removeRow(row));
       }
       if (key === 'Backspace' && this.input.value === '' && this.view) return act(() => this.popView());
@@ -649,6 +667,8 @@
           const ask = this.askFor(q, false);
           return [{ title: null, rows: [...(ask ? [this.askRow(ask)] : []), ...this.commandRows(q, LIMITS.mode)] }];
         }
+        case 'downloads':
+          return [{ title: q ? 'Downloads' : 'Recent downloads', rows: this.downloadRows(q) }];
         default:
           return this.computeAll(q);
       }
@@ -1110,7 +1130,137 @@
         case 'url':
         case 'bangSearch':
           return this.dispatch('open', { url: row.url, disposition });
+        case 'download':
+          return disposition === 'newWindow' ? this.showDownload(row.data) : this.openDownload(row.data);
+        case 'permission':
+          return this.allowDownloads();
       }
+    }
+
+    // ----- downloads (optional permission) -----------------------------------
+
+    async hasDownloads() {
+      try {
+        return await chrome.permissions.contains(DOWNLOAD_PERMISSIONS);
+      } catch {
+        return false;
+      }
+    }
+
+    /** Ask for access (needs the keypress or click that got us here). */
+    async allowDownloads() {
+      let granted = false;
+      // The permission prompt takes focus; don't let the fallback window close on blur meanwhile.
+      this.holdOpen = true;
+      try {
+        granted = await chrome.permissions.request(DOWNLOAD_PERMISSIONS);
+      } catch {
+        granted = false;
+      } finally {
+        this.holdOpen = false;
+        this.focus();
+      }
+      if (!granted) {
+        this.renderFootRight('No access: allow it on the Zelium options page');
+        return false;
+      }
+      await this.loadDownloads();
+      return true;
+    }
+
+    /** Recent downloads (newest first), or null without access. */
+    async loadDownloads() {
+      this.downloads = (await this.hasDownloads())
+        ? await chrome.downloads.search({ orderBy: ['-startTime'], limit: 300 }).catch(() => [])
+        : null;
+      if (this.isOpen) this.update({ keepSel: true });
+      return this.downloads;
+    }
+
+    downloadRow(d, hl) {
+      const name = d.filename ? d.filename.split(/[\\/]/).pop() : P.displayUrl(d.finalUrl || d.url);
+      const meta =
+        d.state === 'in_progress'
+          ? `${d.totalBytes > 0 ? Math.floor((100 * d.bytesReceived) / d.totalBytes) : 0}%`
+          : d.state === 'interrupted'
+            ? 'failed'
+            : d.exists === false
+              ? 'deleted'
+              : [formatBytes(d.fileSize || d.totalBytes), P.relativeTime(Date.parse(d.startTime))].filter(Boolean).join(' · ');
+      return {
+        key: `download:${d.id}`,
+        kind: 'download',
+        icon: 'download',
+        title: name,
+        titleHl: hl?.[0],
+        sub: P.displayUrl(d.finalUrl || d.url),
+        subHl: hl?.[1],
+        meta,
+        url: d.finalUrl || d.url,
+        data: d,
+      };
+    }
+
+    downloadRows(q) {
+      if (this.downloads === undefined) {
+        this.loadDownloads();
+        return [];
+      }
+      if (this.downloads === null) {
+        return [
+          {
+            key: 'permission:downloads',
+            kind: 'permission',
+            icon: 'download',
+            title: 'Allow Zelium to see your downloads',
+            sub: 'asked once; ↵ to allow',
+            data: {},
+          },
+        ];
+      }
+      const items = this.downloads;
+      if (!q) return items.slice(0, LIMITS.mode).map((d) => this.downloadRow(d));
+      return F.rank(q, items, (d) => [d.filename.split(/[\\/]/).pop() || '', P.displayUrl(d.finalUrl || d.url)], {
+        weights: [1, 0.7],
+        limit: LIMITS.mode,
+        minScore: minScoreFor(q, this.strictness()),
+      }).map((r) => this.downloadRow(r.item, r.hl));
+    }
+
+    async openDownload(d) {
+      if (d.state !== 'complete' || d.exists === false) {
+        this.renderFootRight(d.exists === false ? 'The file was moved or deleted' : 'Not finished downloading');
+        return;
+      }
+      try {
+        await chrome.downloads.open(d.id);
+      } catch (err) {
+        this.renderFootRight(`Error: ${err.message}`);
+        return;
+      }
+      this.close();
+    }
+
+    async showDownload(d) {
+      try {
+        await chrome.downloads.show(d.id);
+      } catch (err) {
+        this.renderFootRight(`Error: ${err.message}`);
+        return;
+      }
+      this.close();
+    }
+
+    /** Open the newest finished download that still exists. */
+    async openLatestDownload() {
+      if (!(await this.hasDownloads()) && !(await this.allowDownloads())) return;
+      const list = await this.loadDownloads();
+      const latest = list?.find((d) => d.state === 'complete' && d.exists !== false);
+      if (!latest) {
+        this.renderFootRight('No downloads to open');
+        return;
+      }
+      return this.openDownload(latest);
     }
 
     /**
@@ -1143,6 +1293,8 @@
     }
 
     async runLocalCommand(id) {
+      if (id === 'downloads.search') return this.setMode('downloads');
+      if (id === 'downloads.openLatest') return this.openLatestDownload();
       // The palette runs in an extension page, so only the snapshot knows the
       // tab. Use this open's fresh one (the frame outlives in-page navigation).
       const fresh = await this.snapshotReady?.catch(() => null);
@@ -1197,6 +1349,16 @@
       const bookmarked = isMark || (url && this.snapshot.bookmarks.some((b) => b.url === url));
       const open = (disposition) => () => this.activate(row, disposition);
       const out = [];
+
+      if (row.kind === 'download') {
+        const d = row.data;
+        return [
+          a('open', 'Open File', 'link', () => this.openDownload(d), '↵'),
+          a('show', 'Show in Folder', 'window', () => this.showDownload(d), '⇧↵'),
+          a('copyUrl', 'Copy Download Link', 'copy', () => this.copyAndClose(url, 'Copied')),
+          a('erase', 'Remove from List', 'close', () => (this.popView(), this.removeRow(row)), REMOVE_KEYS),
+        ];
+      }
 
       if (row.kind === 'tab') {
         const t = row.data;
@@ -1303,6 +1465,10 @@
           await this.send('closeTab', { id: row.data.id });
           this.snapshot = { ...this.snapshot, tabs: this.snapshot.tabs.filter((t) => t.id !== row.data.id) };
           this.renderFootRight('Closed tab');
+        } else if (row.kind === 'download') {
+          await chrome.downloads.erase({ id: row.data.id });
+          this.downloads = this.downloads.filter((d) => d.id !== row.data.id);
+          this.renderFootRight('Removed from downloads list');
         } else if (row.kind === 'history') {
           await this.send('deleteHistory', { url: row.url });
           const keep = (i) => i.url !== row.url;

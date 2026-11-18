@@ -37,6 +37,10 @@ search the web.
 - **Ask an AI about the page you're on:** *Ask Claude About This Page* (or ChatGPT, Gemini, …)
   sends "Summarize this page." with the page title and URL, plus any text you had selected. Press
   <kbd>Tab</kbd> on it to write your own question instead.
+- **Downloads:** <kbd>Tab</kbd> to the *Downloads* mode (or `> Search Downloads`) to find a file:
+  <kbd>↵</kbd> opens it, <kbd>⇧↵</kbd> shows it in its folder, the remove key takes it off the list.
+  `> Open Latest Download` opens the newest one. Zelium asks for downloads access the first time,
+  so installing it doesn't show that warning.
 - **Calculator:** `2*(3+4)`, `sqrt(2)^2`, `2*pi`. <kbd>↵</kbd> copies the result.
 - **Direct URLs:** `github.com`, `localhost:3000`, `192.168.1.1` open straight away.
 - **Web search** goes through **your browser's default search engine**.
@@ -172,6 +176,7 @@ src/
 | `sessions` | recently closed tabs, reopen |
 | `search` | search with your default engine |
 | `favicon` | show site icons |
+| `downloads`, `downloads.open` (optional) | search and open downloads; only asked for when you first use them, and removable on the options page |
 | `storage` | your settings, learned picks, and the fallback window between service-worker restarts |
 | `claude.ai`, `chatgpt.com`, `gemini.google.com`, `chat.deepseek.com`, `kimi.com` | type and send your message in a new AI chat (only in the tab Zelium just opened, and only when you used *Ask …*) |
 

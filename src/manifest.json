@@ -45,6 +45,10 @@
     "storage",
     "favicon"
   ],
+  "optional_permissions": [
+    "downloads",
+    "downloads.open"
+  ],
   "host_permissions": [
     "https://claude.ai/*",
     "https://chatgpt.com/*",

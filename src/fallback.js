@@ -18,7 +18,8 @@
   palette.open();
 
   // Clicking back into the browser dismisses the palette, like the overlay.
+  // (Not while a permission prompt the palette opened has focus.)
   window.addEventListener('blur', () => {
-    if (palette.isOpen) window.close();
+    if (palette.isOpen && !palette.holdOpen) window.close();
   });
 })();

@@ -173,4 +173,24 @@
   });
 
   S.load().then(fill);
+
+  // Downloads: an optional permission.
+  const DOWNLOADS = { permissions: ['downloads', 'downloads.open'] };
+  async function refreshDownloads() {
+    const on = await chrome.permissions.contains(DOWNLOADS).catch(() => false);
+    $('downloads-status').textContent = on ? 'Allowed' : 'Not allowed';
+    $('downloads-allow').hidden = on;
+    $('downloads-revoke').hidden = !on;
+  }
+  $('downloads-allow').addEventListener('click', async () => {
+    await chrome.permissions.request(DOWNLOADS).catch(() => false);
+    refreshDownloads();
+  });
+  $('downloads-revoke').addEventListener('click', async () => {
+    await chrome.permissions.remove(DOWNLOADS).catch(() => false);
+    refreshDownloads();
+  });
+  chrome.permissions.onAdded?.addListener(refreshDownloads);
+  chrome.permissions.onRemoved?.addListener(refreshDownloads);
+  refreshDownloads();
 })();

@@ -15,7 +15,7 @@
  */
 import { spawn, execFileSync, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, cpSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir, platform, homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -168,6 +168,9 @@ function prepareExtension(dir) {
   const manifestPath = join(ext, 'manifest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   manifest.host_permissions = ['<all_urls>'];
+  // DevTools can't click the permission prompt: grant the optional downloads access up front.
+  manifest.permissions = [...manifest.permissions, ...(manifest.optional_permissions ?? [])];
+  delete manifest.optional_permissions;
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
   return ext;
 }
@@ -211,6 +214,14 @@ async function main() {
   const dir = mkdtempSync(join(tmpdir(), 'zelium-e2e-'));
   const ext = prepareExtension(dir);
   const profile = join(dir, 'profile');
+  // Downloads made by the tests go to the temp dir, never the user's Downloads folder.
+  const downloadsDir = join(dir, 'downloads');
+  mkdirSync(join(profile, 'Default'), { recursive: true });
+  mkdirSync(downloadsDir, { recursive: true });
+  writeFileSync(
+    join(profile, 'Default', 'Preferences'),
+    JSON.stringify({ download: { default_directory: downloadsDir, prompt_for_download: false, directory_upgrade: true }, savefile: { default_directory: downloadsDir } }),
+  );
   const server = await startServer();
   const base = `http://127.0.0.1:${server.address().port}`;
 
@@ -669,6 +680,37 @@ async function main() {
       // Back to defaults on the next open.
       await openOn('a', a);
       await waitFor(() => a.palette(`p.prefsReady?.then(() => p.wrap.dataset.theme === 'dark')`), { message: 'dark again' });
+      await closeOn(a);
+    });
+
+    await test('downloads mode: asks for access, then search and remove a download', async () => {
+      // Without access, the mode offers to ask for it.
+      await a.send('Page.bringToFront');
+      await openOn('a', a);
+      await a.palette(`(p.hasDownloads = async () => false, p.setMode('downloads'), true)`);
+      await waitFor(() => a.palette(`p.rows[0]?.kind === 'permission'`), { message: 'permission row' });
+      await a.palette('(delete p.hasDownloads, true)');
+      await closeOn(a);
+
+      // A real download, saved in the test's temp folder (seeded in the profile's Preferences).
+      const id = await swEval(`return await chrome.downloads.download({ url: ${JSON.stringify(`${base}/b.html`)}, filename: 'zelium-e2e.html' })`);
+      const item = await waitFor(
+        () => swEval(`const [d] = await chrome.downloads.search({ id: ${id} }); return d?.state === 'complete' && d;`),
+        { message: 'download complete' },
+      );
+      if (!item.filename.startsWith(downloadsDir)) {
+        // Never leave a test file in the user's own folders.
+        await swEval(`await chrome.downloads.removeFile(${id}).catch(() => {})`);
+        throw new Error(`download went to ${item.filename}, not the temp folder`);
+      }
+
+      await openOn('a', a);
+      await a.palette(`(p.setMode('downloads'), true)`);
+      await a.send('Input.insertText', { text: 'zelium-e2e' });
+      const row = await waitFor(() => a.palette(`p.rows[0]?.kind === 'download' && p.rows[0]`), { message: 'download row' });
+      assert(row.title === 'zelium-e2e.html' && row.url.endsWith('/b.html'), JSON.stringify({ title: row.title, url: row.url }));
+      await press(a, 'Backspace', platform() === 'darwin' ? 4 : 2 | 8);
+      await waitFor(() => swEval(`return (await chrome.downloads.search({ id: ${id} })).length === 0`), { message: 'removed from the list' });
       await closeOn(a);
     });
 

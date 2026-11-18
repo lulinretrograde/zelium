@@ -113,6 +113,15 @@
           <textarea name="customAis" rows="3" spellcheck="false" placeholder="myai | My AI | https://chat.example.com/?q=%s"></textarea>
           <small class="warn" id="customAis-errors" hidden></small>
         </section>
+        <section class="card">
+          <div class="label">Downloads</div>
+          <p class="muted">Search and open your downloads from the palette (Tab to the Downloads mode, or <kbd>&gt; Open Latest Download</kbd>). Zelium asks for access the first time.</p>
+          <div class="shortcut-row">
+            <span id="downloads-status">…</span>
+            <button type="button" id="downloads-allow">Allow access</button>
+            <button type="button" class="ghost" id="downloads-revoke">Remove access</button>
+          </div>
+        </section>
       </form>
 
       <footer class="muted">

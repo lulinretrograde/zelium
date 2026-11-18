@@ -109,6 +109,9 @@
     { id: 'zoom.out', title: 'Zoom Out', keywords: 'smaller', icon: 'zoomOut', group: 'View' },
     { id: 'zoom.reset', title: 'Reset Zoom', keywords: 'actual size 100', icon: 'zoomReset', group: 'View' },
 
+    { id: 'downloads.search', title: 'Search Downloads', keywords: 'files downloaded', icon: 'download', local: true, group: 'Downloads' },
+    { id: 'downloads.openLatest', title: 'Open Latest Download', keywords: 'file last recent newest downloaded', icon: 'download', local: true, group: 'Downloads' },
+
     { id: 'page.history', title: 'Open History', keywords: 'chrome page', icon: 'history', group: 'Open' },
     { id: 'page.downloads', title: 'Open Downloads', keywords: 'chrome page files', icon: 'download', group: 'Open' },
     { id: 'page.bookmarks', title: 'Open Bookmark Manager', keywords: 'chrome page', icon: 'bookmark', group: 'Open' },
