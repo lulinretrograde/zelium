@@ -31,6 +31,7 @@ const refs = [
   ...Object.values(manifest.action.default_icon),
   'palette/palette.css',
   'fallback.html',
+  'frame.html',
   'welcome.html',
   'third_party/bangs/bangs.json',
 ];

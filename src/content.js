@@ -1,111 +1,145 @@
 /**
- * Injected on demand (activeTab) into the current page. Mounts the palette in
- * a closed shadow root so page CSS can't affect it and vice versa, and puts
- * it in the top layer (popover) so it sits above page modals.
+ * Injected on demand (activeTab) into the current page. Mounts the overlay: a
+ * closed shadow root in the top layer (popover), holding an iframe with the
+ * palette (frame.html).
+ *
+ * The palette runs inside that extension-origin iframe, not in the page, so
+ * the page can't read what you type (not even with capture-phase listeners),
+ * restyle the UI, or see your tabs, bookmarks and history.
  *
  * Runs once per page; later shortcut presses arrive as "zelium:toggle".
  */
 (() => {
-  const Z = globalThis.Zelium;
   const TAG = 'zelium-palette';
+  const XHTML = 'http://www.w3.org/1999/xhtml';
+  const READY_TIMEOUT = 2500;
+
+  const useFallback = () => chrome.runtime.sendMessage({ type: 'zelium:openPalette', forceFallback: true });
 
   // Raw XML/SVG documents, or documents without a root, can't host the overlay:
   // hand over to the fallback window instead.
   if (!(document.documentElement instanceof HTMLElement) || typeof Element.prototype.attachShadow !== 'function') {
-    chrome.runtime.sendMessage({ type: 'zelium:openPalette', forceFallback: true });
+    useFallback();
     return;
   }
 
   // Remove a stale host left behind by a previous (reloaded/updated) extension instance.
   document.querySelectorAll(TAG).forEach((el) => el.remove());
 
-  const host = document.createElementNS('http://www.w3.org/1999/xhtml', TAG);
-  host.style.cssText = [
-    'all: initial !important',
-    'position: fixed !important',
-    'inset: 0 !important',
-    'width: 100vw !important',
-    'height: 100vh !important',
-    'max-width: none !important',
-    'max-height: none !important',
-    'margin: 0 !important',
-    'padding: 0 !important',
-    'border: 0 !important',
-    'background: transparent !important',
-    'overflow: visible !important',
-    'z-index: 2147483647 !important',
-    'display: block !important',
-  ].join(';');
-  const supportsPopover = typeof host.showPopover === 'function';
-  if (supportsPopover) host.setAttribute('popover', 'manual');
-
-  const shadow = host.attachShadow({ mode: 'closed' });
-
-  // Keep keystrokes inside the palette from reaching page shortcut handlers.
-  for (const type of ['keydown', 'keyup', 'keypress', 'input', 'beforeinput', 'paste', 'copy', 'cut']) {
-    host.addEventListener(type, (e) => e.stopPropagation());
-  }
-
-  let palette = null;
-  let styled = null;
-  let previousFocus = null;
+  let host = null;
+  let frame = null;
+  let port = null;
+  let ready = false;
   let visible = false;
+  let readyTimer = null;
+  let previousFocus = null;
 
-  function ensureStyles() {
-    styled ??= fetch(chrome.runtime.getURL('palette/palette.css'))
-      .then((r) => r.text())
-      .then((css) => {
-        const sheet = new CSSStyleSheet();
-        sheet.replaceSync(css);
-        shadow.adoptedStyleSheets = [sheet];
-      });
-    return styled;
+  /** Build the host + iframe + channel. Again later if the page removed the host. */
+  function build() {
+    host = document.createElementNS(XHTML, TAG);
+    host.style.cssText = [
+      'all: initial !important',
+      'position: fixed !important',
+      'inset: 0 !important',
+      'width: 100vw !important',
+      'height: 100vh !important',
+      'max-width: none !important',
+      'max-height: none !important',
+      'margin: 0 !important',
+      'padding: 0 !important',
+      'border: 0 !important',
+      'background: transparent !important',
+      'overflow: visible !important',
+      'z-index: 2147483647 !important',
+      'display: block !important',
+    ].join(';');
+    if (typeof host.showPopover === 'function') host.setAttribute('popover', 'manual');
+    const shadow = host.attachShadow({ mode: 'closed' });
+
+    const nonce = crypto.randomUUID();
+    frame = document.createElementNS(XHTML, 'iframe');
+    frame.src = `${chrome.runtime.getURL('frame.html')}#${nonce}`;
+    frame.setAttribute('allow', 'clipboard-write');
+    frame.setAttribute('title', 'Zelium');
+    frame.style.cssText =
+      'all: initial; display: block; position: fixed; inset: 0; width: 100%; height: 100%; border: 0; ' +
+      'background: transparent; color-scheme: normal; visibility: hidden;';
+    shadow.append(frame);
+
+    const channel = new MessageChannel();
+    port = channel.port1;
+    ready = false;
+    port.onmessage = ({ data }) => {
+      if (data?.type === 'ready') {
+        ready = true;
+        clearTimeout(readyTimer);
+        if (visible) reveal();
+      } else if (data?.type === 'close') {
+        hide();
+      }
+    };
+    const origin = new URL(frame.src).origin;
+    frame.addEventListener(
+      'load',
+      () => frame.contentWindow?.postMessage({ type: 'zelium:port', nonce }, origin, [channel.port2]),
+      { once: true },
+    );
   }
 
-  async function show() {
+  function setShown(shown) {
+    host.style.setProperty('display', shown ? 'block' : 'none', 'important');
+    if (typeof host.showPopover !== 'function') return;
+    try {
+      if (shown) host.showPopover();
+      else host.hidePopover();
+    } catch {
+      /* already in that state; z-index still applies */
+    }
+  }
+
+  function reveal() {
+    frame.style.visibility = 'visible';
+    frame.focus();
+    port.postMessage({ type: 'open' });
+  }
+
+  function show() {
     if (visible) return;
     visible = true;
-    await ensureStyles();
-    palette ??= new Z.Palette({ root: shadow, onClose: hide });
     previousFocus = document.activeElement;
-    document.documentElement.appendChild(host);
-    if (supportsPopover) {
-      try {
-        host.showPopover();
-      } catch {
-        /* fall back to z-index */
-      }
+    if (!host?.isConnected) {
+      // First use, or the page threw our host away (which also kills the iframe).
+      host?.remove();
+      build();
+      document.documentElement.appendChild(host);
     }
-    palette.open();
+    setShown(true);
+    if (ready) {
+      reveal();
+      return;
+    }
+    // The frame never answered (blocked by the browser or the page): use the window instead.
+    clearTimeout(readyTimer);
+    readyTimer = setTimeout(() => {
+      if (ready || !visible) return;
+      hide();
+      host.remove();
+      useFallback();
+    }, READY_TIMEOUT);
   }
 
   function hide() {
     if (!visible) return;
     visible = false;
-    if (palette?.isOpen) palette.close(); // close() calls back into hide(); guarded by `visible`
-    if (supportsPopover) {
-      try {
-        host.hidePopover();
-      } catch {
-        /* not open */
-      }
-    }
-    host.remove();
+    clearTimeout(readyTimer);
+    if (ready) port.postMessage({ type: 'close' }); // no-op if the palette closed itself
+    frame.style.visibility = 'hidden';
+    setShown(false);
     if (previousFocus && previousFocus.isConnected && typeof previousFocus.focus === 'function') {
       previousFocus.focus({ preventScroll: true });
     }
     previousFocus = null;
   }
-
-  // Test hook. Lives only in the extension's isolated world, never visible to the page.
-  Z.instance = {
-    get palette() {
-      return palette;
-    },
-    get visible() {
-      return visible;
-    },
-  };
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type !== 'zelium:toggle') return false;

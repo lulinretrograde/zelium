@@ -10,14 +10,9 @@
  *  - Perform actions (switch/open/close tabs, search, run commands).
  */
 
-const PALETTE_FILES = [
-  'palette/fuzzy.js',
-  'palette/parse.js',
-  'palette/icons.js',
-  'palette/commands.js',
-  'palette/palette.js',
-  'content.js',
-];
+// The palette itself runs in an extension iframe (frame.html); only the
+// overlay host is injected into the page.
+const PALETTE_FILES = ['content.js'];
 
 // Only ordinary web pages can be scripted. Every browser-internal scheme
 // (chrome:, edge:, brave:, opera:, vivaldi:, arc:, helium:, about:, …) gets the

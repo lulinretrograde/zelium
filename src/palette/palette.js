@@ -281,8 +281,9 @@
       // Render the previous snapshot immediately (if any), then refresh.
       this.update();
       this.focus();
+      this.snapshotReady = this.send('snapshot');
       try {
-        this.snapshot = await this.send('snapshot');
+        this.snapshot = await this.snapshotReady;
       } catch (err) {
         this.renderFootRight(`Error: ${err.message}`);
         return;
@@ -896,9 +897,15 @@
     }
 
     async runLocalCommand(id) {
-      const tab = this.snapshot.current;
-      const url = tab?.url ?? location.href;
-      const title = tab?.title ?? document.title;
+      // The palette runs in an extension page, so only the snapshot knows the
+      // tab. Use this open's fresh one (the frame outlives in-page navigation).
+      const fresh = await this.snapshotReady?.catch(() => null);
+      const tab = fresh?.current ?? this.snapshot.current;
+      if (!tab) {
+        this.renderFootRight('Error: no current tab');
+        return;
+      }
+      const { url, title } = tab;
       if (id === 'copy.url') return this.copyAndClose(url, 'Copied URL');
       if (id === 'copy.title') return this.copyAndClose(title, 'Copied title');
       if (id === 'copy.markdown') {

@@ -123,7 +123,8 @@ Zelium isn't on a store yet, so load it unpacked:
 src/
 ├── manifest.json        MV3 manifest
 ├── background.js        service worker: shortcut, data (tabs/bookmarks/history/sessions), actions
-├── content.js           mounts the palette in a closed shadow root + top-layer popover
+├── content.js           mounts the overlay (closed shadow root + top-layer popover + iframe)
+├── frame.html/.js       the palette inside that iframe, on the extension's own origin
 ├── fallback.html/.js    popup window used on pages that can't be scripted
 ├── welcome.html/.css/.js  welcome + options page (shows/fixes the shortcut)
 ├── third_party/bangs/   Helium's bang list (MIT, Kagi + imput), compacted by scripts/update-bangs.mjs
@@ -138,8 +139,10 @@ src/
 
 - The palette is injected **on demand** through `activeTab` + `scripting`. Zelium doesn't run on
   pages until you press the shortcut, and it doesn't need "read all sites" host permissions.
-- The UI lives in a **closed shadow root** with its own stylesheet, so pages can't restyle it. It also
-  goes into the browser's **top layer** (Popover API), so it shows above page modals.
+- The palette runs in an **extension iframe**, not in the page. The page can't read what you type (not
+  even with capture-phase key listeners), restyle the UI, or see your tabs, bookmarks and history.
+  The iframe sits in a closed shadow root in the browser's **top layer** (Popover API), so it shows
+  above page modals. `frame.html` is the only file pages can load from the extension.
 - History is loaded as a snapshot of the last 1000 visits for instant fuzzy matching, plus a
   debounced `chrome.history.search` per query to reach older entries.
 

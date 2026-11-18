@@ -102,6 +102,11 @@ const PAGES = {
     <script>
       window.__keys = 0;
       window.__keyLog = [];
+      // A keylogger: capture phase on window runs before anything in the page.
+      window.__captured = [];
+      for (const type of ['keydown', 'keypress', 'keyup', 'input', 'beforeinput']) {
+        window.addEventListener(type, (e) => window.__captured.push(type + ':' + (e.key ?? e.data)), true);
+      }
       document.addEventListener('keydown', (e) => { window.__keys++; window.__keyLog.push(e.key + '@' + (document.activeElement?.tagName) + ' host=' + !!document.querySelector('zelium-palette') + ' focus=' + document.hasFocus()); });
     </script>`,
   '/b.html': `<!doctype html><title>Beta Docs</title><h1>Beta</h1>`,
@@ -181,6 +186,16 @@ async function test(name, fn) {
   } catch (err) {
     results.push({ name, ok: false, err });
     console.log(`  ✗ ${name}\n      ${String(err?.message ?? err).split('\n').join('\n      ')}`);
+  }
+}
+
+/** Real key presses that insert text (Input.insertText fires no key events). */
+async function typeChars(conn, text) {
+  for (const ch of text) {
+    const code = `Key${ch.toUpperCase()}`;
+    const keyCode = ch.toUpperCase().charCodeAt(0);
+    await conn.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ch, code, windowsVirtualKeyCode: keyCode, text: ch });
+    await conn.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ch, code, windowsVirtualKeyCode: keyCode });
   }
 }
 
@@ -309,17 +324,28 @@ async function main() {
     async function attach(suffix) {
       const t = await waitFor(() => findTarget((t) => t.type === 'page' && t.url.endsWith(suffix)), { message: `tab ${suffix}` });
       const page = connect(t.webSocketDebuggerUrl);
-      const contexts = [];
-      page.on('Runtime.executionContextCreated', ({ context }) => contexts.push(context));
-      page.on('Runtime.executionContextsCleared', () => (contexts.length = 0));
-      await page.send('Runtime.enable');
-      page.isolated = async (expr) => {
-        const ctx = await waitFor(() => [...contexts].reverse().find((c) => c.origin === `chrome-extension://${extId}` || c.name === 'Zelium'), {
-          message: 'extension isolated world',
-        });
-        return page.evaluate(expr, ctx.id);
+      // The palette runs in the overlay's extension iframe (its own target).
+      let frame = null;
+      page.frame = async () => {
+        const ft = await waitFor(
+          () => findTarget((f) => f.type === 'iframe' && f.parentId === t.id && f.url.includes('/frame.html')),
+          { message: `palette iframe in ${suffix}` },
+        );
+        if (frame?.id !== ft.id) {
+          frame?.conn.close();
+          frame = { id: ft.id, conn: connect(ft.webSocketDebuggerUrl) };
+        }
+        return frame.conn;
       };
-      page.palette = (expr) => page.isolated(`(() => { const p = Zelium.instance.palette; return ${expr}; })()`);
+      page.palette = async (expr) =>
+        (await page.frame()).evaluate(`(() => { const p = Zelium.instance?.palette; return ${expr}; })()`);
+      page.overlayShown = () =>
+        page.evaluate(`(() => { const h = document.querySelector('zelium-palette'); return !!h && getComputedStyle(h).display !== 'none'; })()`);
+      const close = page.close;
+      page.close = () => {
+        frame?.conn.close();
+        close();
+      };
       return page;
     }
 
@@ -336,9 +362,9 @@ async function main() {
 
     /** Press Escape and wait until the overlay is gone (no-op if a page reload already removed it). */
     async function closeOn(page) {
-      if (!(await page.evaluate(`!!document.querySelector('zelium-palette')`))) return;
+      if (!(await page.overlayShown())) return;
       await press(page, 'Escape');
-      await waitFor(async () => !(await page.evaluate(`!!document.querySelector('zelium-palette')`)), { message: 'palette closed' });
+      await waitFor(async () => !(await page.overlayShown()), { message: 'palette closed' });
     }
 
     let a;
@@ -371,13 +397,20 @@ async function main() {
       });
     });
 
-    await test('keystrokes do not leak to the page', async () => {
+    await test('keystrokes do not leak to the page (not even to capture listeners)', async () => {
       assert(await a.palette('p && p.isOpen'), 'palette not open');
-      await a.evaluate('window.__keys = 0; window.__keyLog = []');
+      await a.evaluate('window.__keys = 0; window.__keyLog = []; window.__captured = []');
+      const before = await a.palette('p.input.value');
+      await typeChars(a, 'sec');
       await press(a, 'ArrowDown');
       await press(a, 'ArrowUp');
+      await waitFor(() => a.palette(`p.input.value === ${JSON.stringify(before + 'sec')}`), { message: 'typed text in the palette' });
       const leaked = await a.evaluate('window.__keys');
       assert(leaked === 0, `page saw ${leaked} keydown events: ${await a.evaluate('JSON.stringify(window.__keyLog)')}`);
+      const captured = await a.evaluate('JSON.stringify(window.__captured)');
+      assert(captured === '[]', `page's capture listeners saw: ${captured}`);
+      // Put the query back for the next test.
+      for (let i = 0; i < 3; i++) await press(a, 'Backspace');
     });
 
     await test('Enter switches to the selected tab', async () => {
@@ -476,7 +509,7 @@ async function main() {
 
     await test('Escape closes the overlay without leaking the key', async () => {
       await a.evaluate('window.__keys = 0; window.__keyLog = []');
-      assert(await a.evaluate(`!!document.querySelector('zelium-palette')`), 'palette not open before Escape');
+      assert(await a.overlayShown(), 'palette not open before Escape');
       await closeOn(a);
       const leaked = await a.evaluate('window.__keys');
       assert(leaked === 0, `page saw the Escape: ${await a.evaluate('JSON.stringify(window.__keyLog)')}`);

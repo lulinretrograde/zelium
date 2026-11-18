@@ -56,9 +56,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "palette/palette.css",
-        "third_party/bangs/bangs.json",
-        "_favicon/*"
+        "frame.html"
       ],
       "matches": [
         "<all_urls>"
