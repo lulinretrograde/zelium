@@ -295,6 +295,12 @@ async function handle(msg, sender) {
       await chrome.tabs.remove(msg.id);
       return true;
 
+    case 'zelium:bookmarkSet':
+      return setBookmark(msg.url, msg.title, msg.parentId);
+
+    case 'zelium:bookmarkRemove':
+      return removeBookmarks(msg.url);
+
     case 'zelium:deleteHistory':
       await chrome.history.deleteUrl({ url: msg.url });
       return true;
@@ -327,7 +333,8 @@ function slimTab(t) {
   };
 }
 
-function flattenBookmarks(nodes, path = [], out = []) {
+/** Bookmarks (and, if `folders` is given, folders) in tree order. */
+function flattenBookmarks(nodes, path = [], out = [], folders = null) {
   for (const node of nodes) {
     if (node.url) {
       out.push({
@@ -338,7 +345,8 @@ function flattenBookmarks(nodes, path = [], out = []) {
         dateAdded: node.dateAdded ?? 0,
       });
     } else if (node.children) {
-      flattenBookmarks(node.children, node.title ? [...path, node.title] : path, out);
+      if (folders && node.title) folders.push({ id: node.id, title: node.title, path: path.join(' / ') });
+      flattenBookmarks(node.children, node.title ? [...path, node.title] : path, out, folders);
     }
   }
   return out;
@@ -386,8 +394,13 @@ async function snapshot(ctx) {
     }
   }
 
+  const folders = [];
+  const bookmarks = flattenBookmarks(tree, [], [], folders);
+  const current = ctx ? slimTab(ctx) : null;
+  if (current) current.bookmarked = bookmarks.some((b) => b.url === current.url);
+
   return {
-    current: ctx ? slimTab(ctx) : null,
+    current,
     windowCount: windows.length,
     tabs: tabs
       .filter((t) => !(t.url || '').startsWith(ownOrigin))
@@ -396,10 +409,34 @@ async function snapshot(ctx) {
         if (!slim.lastAccessed) slim.lastAccessed = mru[t.id] ?? (t.active ? Date.now() - 1 : 0);
         return slim;
       }),
-    bookmarks: flattenBookmarks(tree),
+    bookmarks,
+    folders,
     history: history.map(slimHistory),
     closed: closedEntries,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Bookmarks
+// ---------------------------------------------------------------------------
+
+/** Bookmark `url` (in `parentId`, or the browser's default folder); an existing bookmark is moved there instead. */
+async function setBookmark(url, title, parentId) {
+  assertSafeUrl(url);
+  const [existing] = await chrome.bookmarks.search({ url });
+  if (existing) {
+    if (parentId && existing.parentId !== parentId) await chrome.bookmarks.move(existing.id, { parentId });
+    return 'moved';
+  }
+  await chrome.bookmarks.create({ url, title: title || url, ...(parentId ? { parentId } : {}) });
+  return 'created';
+}
+
+/** Remove every bookmark of exactly this URL. */
+async function removeBookmarks(url) {
+  const found = await chrome.bookmarks.search({ url });
+  await Promise.all(found.map((b) => chrome.bookmarks.remove(b.id)));
+  return found.length;
 }
 
 async function searchHistory(text) {

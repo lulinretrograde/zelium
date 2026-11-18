@@ -55,6 +55,9 @@
     { id: 'tab.sortByDomain', title: 'Sort Tabs by Domain', keywords: 'organize order arrange', icon: 'sort', group: 'Tab' },
     { id: 'session.reopen', title: 'Reopen Closed Tab', keywords: 'undo restore', icon: 'restore', group: 'Tab' },
 
+    { id: 'bookmark.toggle', title: (t) => (t?.bookmarked ? 'Remove Bookmark' : 'Bookmark Page'), keywords: 'favorite star save unbookmark delete', icon: 'bookmark', local: true, group: 'Bookmark' },
+    { id: 'bookmark.folder', title: (t) => (t?.bookmarked ? 'Move Bookmark to Folder…' : 'Bookmark Page in Folder…'), keywords: 'favorite star save organize', icon: 'bookmark', local: true, group: 'Bookmark' },
+
     ...AI.map((a) => ({
       id: a.id,
       title: `New ${a.name} Chat`,

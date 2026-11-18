@@ -22,7 +22,7 @@
   const MODE_ORDER = ['all', 'tabs', 'bookmarks', 'history', 'commands'];
   const PREFIX_TO_MODE = { '@': 'tabs', '#': 'bookmarks', '/': 'history', '>': 'commands' };
 
-  const EMPTY_SNAPSHOT = { current: null, windowCount: 1, tabs: [], bookmarks: [], history: [], closed: [] };
+  const EMPTY_SNAPSHOT = { current: null, windowCount: 1, tabs: [], bookmarks: [], folders: [], history: [], closed: [] };
 
   const LIMITS = {
     all: { tabs: 6, bookmarks: 5, history: 8, commands: 3 },
@@ -161,7 +161,8 @@
       this.chip.title = 'Back to all (⌫)';
       this.chip.addEventListener('mousedown', (e) => {
         e.preventDefault();
-        this.setMode('all');
+        if (this.view) this.popView();
+        else this.setMode('all');
       });
       this.input = h('input', 'z-input');
       Object.assign(this.input, { type: 'text', spellcheck: false, autocomplete: 'off' });
@@ -263,8 +264,11 @@
         case 'bang':
           keys.push(['↵', 'pick']);
           break;
+        case 'action':
+          keys.push(['↵', 'select']);
+          break;
       }
-      keys.push(['esc', 'close']);
+      keys.push(['esc', this.view ? 'back' : 'close']);
       for (const [k, label] of keys) {
         const hint = h('span', 'z-hint');
         hint.append(h('kbd', null, k), document.createTextNode(label));
@@ -277,6 +281,7 @@
 
     async open() {
       this.isOpen = true;
+      this.view = null;
       this.mode = 'all';
       this.query = '';
       this.input.value = '';
@@ -333,12 +338,65 @@
     }
 
     applyMode() {
-      const m = MODES[this.mode];
+      const m = this.view ? { label: this.view.title, placeholder: this.view.placeholder || 'Filter…' } : MODES[this.mode];
       this.chip.hidden = !m.label;
       this.chip.textContent = m.label;
       this.input.placeholder = m.placeholder;
-      this.wrap.dataset.mode = this.mode;
+      this.wrap.dataset.mode = this.view ? 'view' : this.mode;
       this.renderFootLeft();
+    }
+
+    // ----- sub-views (pickers, the actions menu) -----------------------------
+
+    /**
+     * Show a list of choices in place of the results. Esc (or ⌫ on an empty
+     * input) goes back to where you were.
+     * @param {{title:string, placeholder?:string, items:{id:string, title:string, sub?:string, meta?:string,
+     *          icon?:string, fav?:string, keywords?:string, run:(disposition:string)=>any}[]}} view
+     */
+    pushView(view) {
+      view.prev = { view: this.view, mode: this.mode, value: this.input.value, query: this.query, sel: this.sel };
+      this.view = view;
+      this.input.value = '';
+      this.query = '';
+      this.sel = 0;
+      this.applyMode();
+      this.update();
+      this.input.focus({ preventScroll: true });
+    }
+
+    popView() {
+      const prev = this.view?.prev;
+      if (!prev) return;
+      this.view = prev.view;
+      this.mode = prev.mode;
+      this.input.value = prev.value;
+      this.query = prev.query;
+      this.sel = prev.sel;
+      this.applyMode();
+      this.update();
+      this.input.focus({ preventScroll: true });
+    }
+
+    viewRows(q) {
+      const toRow = (item, hl) => ({
+        key: `action:${item.id}`,
+        kind: 'action',
+        icon: item.icon,
+        fav: item.fav,
+        title: item.title,
+        titleHl: hl?.[0],
+        sub: item.sub,
+        subHl: hl?.[1],
+        meta: item.meta,
+        data: item,
+      });
+      const items = this.view.items;
+      if (!q) return items.map((i) => toRow(i));
+      return F.rank(q, items, (i) => [i.title, i.sub || '', i.keywords || ''], {
+        weights: [1, 0.6, 0.4],
+        minScore: minScoreFor(q, 2.5),
+      }).map((r) => toRow(r.item, r.hl));
     }
 
     onInput(e) {
@@ -346,7 +404,7 @@
       // A prefix typed into the empty box switches modes; pasted or dropped
       // text ("/r/rust", "#tag", "@user") is a query, also as you keep typing.
       const pasted = e?.inputType === 'insertFromPaste' || e?.inputType === 'insertFromDrop';
-      if (this.mode === 'all' && this.query === '' && PREFIX_TO_MODE[value[0]] && !pasted) {
+      if (!this.view && this.mode === 'all' && this.query === '' && PREFIX_TO_MODE[value[0]] && !pasted) {
         const mode = PREFIX_TO_MODE[value[0]];
         value = value.slice(1);
         this.input.value = value;
@@ -363,7 +421,7 @@
     scheduleHistory() {
       clearTimeout(this.historyTimer);
       const q = this.query.trim();
-      if (!q || !(this.mode === 'all' || this.mode === 'history')) return;
+      if (!q || this.view || !(this.mode === 'all' || this.mode === 'history')) return;
       this.historyTimer = setTimeout(async () => {
         try {
           const items = await this.send('history', { text: q });
@@ -403,7 +461,7 @@
       const row = this.rows[this.sel];
       const act = (run, closes = false) => ({ run, closes });
 
-      if (key === 'Escape') return act(() => this.close(), true);
+      if (key === 'Escape') return this.view ? act(() => this.popView()) : act(() => this.close(), true);
       if (key === 'ArrowDown' || (e.ctrlKey && (key === 'n' || key === 'j'))) return act(() => this.move(1));
       if (key === 'ArrowUp' || (e.ctrlKey && (key === 'p' || key === 'k'))) return act(() => this.move(-1));
       if (key === 'PageDown') return act(() => this.move(8, false));
@@ -413,6 +471,7 @@
         return act(() => row && this.activate(row, disposition), true);
       }
       if (key === 'Tab') {
+        if (this.view) return act(() => {});
         if (row?.kind === 'bang') return act(() => this.completeBang(row));
         if (row?.kind === 'command' && row.data.ai && !e.shiftKey) return act(() => this.completeAsk(row.data.ai));
         return act(() => this.cycleMode(e.shiftKey ? -1 : 1));
@@ -420,6 +479,7 @@
       if (key === 'Backspace' && mod && (IS_MAC || e.shiftKey) && (row?.kind === 'tab' || row?.kind === 'history')) {
         return act(() => this.removeRow(row));
       }
+      if (key === 'Backspace' && this.input.value === '' && this.view) return act(() => this.popView());
       if (key === 'Backspace' && this.input.value === '' && this.mode !== 'all') return act(() => this.setMode('all'));
       if (mod && key.toLowerCase() === 'c' && this.input.selectionStart === this.input.selectionEnd && row?.url) {
         return act(() => this.copyText(row.url).then((ok) => this.renderFootRight(ok ? 'Copied URL' : 'Copy failed')));
@@ -522,6 +582,7 @@
 
     compute() {
       const q = this.query.trim();
+      if (this.view) return [{ title: null, rows: this.viewRows(q) }];
       switch (this.mode) {
         case 'tabs':
           return [{ title: q ? 'Tabs' : 'Open tabs', rows: this.tabRows(q, LIMITS.mode) }];
@@ -857,6 +918,8 @@
     async activate(row, disposition = 'current') {
       if (!row) return;
       switch (row.kind) {
+        case 'action':
+          return row.data.run(disposition);
         case 'bang':
           this.completeBang(row);
           return;
@@ -904,7 +967,7 @@
      * the error if one fails; slow ones (an AI chat typing its message) close
      * right away. The fallback window waits for the whole action.
      */
-    async dispatch(type, data) {
+    async dispatch(type, data, { done } = {}) {
       const pending = this.send(type, data).then(
         () => null,
         (err) => err,
@@ -917,7 +980,13 @@
         else console.warn('[Zelium]', err);
         return;
       }
-      this.close();
+      if (done && this.isOpen) {
+        // Say what happened before closing (for actions with no visible effect).
+        this.renderFootRight(done);
+        setTimeout(() => this.close(), 380);
+      } else {
+        this.close();
+      }
       if (!this.fallback) pending.then((late) => late && console.warn('[Zelium]', late));
     }
 
@@ -933,12 +1002,35 @@
       const { url, title } = tab;
       if (id === 'copy.url') return this.copyAndClose(url, 'Copied URL');
       if (id === 'copy.title') return this.copyAndClose(title, 'Copied title');
+      if (id === 'bookmark.toggle') {
+        return tab.bookmarked
+          ? this.dispatch('bookmarkRemove', { url }, { done: 'Removed bookmark' })
+          : this.dispatch('bookmarkSet', { url, title }, { done: 'Bookmarked' });
+      }
+      if (id === 'bookmark.folder') return this.pickBookmarkFolder({ url, title }, tab.bookmarked);
       if (id === 'copy.markdown') return this.copyAndClose(P.markdownLink(title, url), 'Copied Markdown link');
       if (id === 'copy.windowUrls' || id === 'copy.windowMarkdown') {
         const tabs = (fresh ?? this.snapshot).tabs.filter((t) => t.windowId === tab.windowId).sort((a, b) => a.index - b.index);
         const format = id === 'copy.windowMarkdown' ? 'markdown' : 'urls';
         return this.copyAndClose(P.formatTabList(tabs, format), `Copied ${tabs.length} tab${tabs.length === 1 ? '' : 's'}`);
       }
+    }
+
+    /** Folder picker: bookmark `page` there, or move its existing bookmark. */
+    pickBookmarkFolder(page, bookmarked) {
+      const folders = this.snapshot.folders;
+      this.pushView({
+        title: bookmarked ? 'Move to' : 'Bookmark in',
+        placeholder: 'Pick a folder…',
+        items: folders.map((f) => ({
+          id: `folder:${f.id}`,
+          icon: 'bookmark',
+          title: f.title,
+          sub: f.path,
+          run: () =>
+            this.dispatch('bookmarkSet', { ...page, parentId: f.id }, { done: `${bookmarked ? 'Moved' : 'Bookmarked'} in ${f.title}` }),
+        })),
+      });
     }
 
     async copyAndClose(text, message) {

@@ -491,6 +491,45 @@ async function main() {
       await closeOn(a);
     });
 
+    await test('> Bookmark Page, Remove Bookmark, Bookmark Page in Folder…', async () => {
+      const url = `${base}/a.html`;
+      const marks = () => swEval(`return await chrome.bookmarks.search({ url: ${JSON.stringify(url)} })`);
+      const run = async (text, id) => {
+        await a.send('Page.bringToFront');
+        await openOn('a', a);
+        await waitFor(() => a.palette('p.snapshotReady && p.snapshot.current?.url === ' + JSON.stringify(url)), { message: 'snapshot' });
+        await a.send('Input.insertText', { text });
+        await waitFor(() => a.palette(`p.rows[0]?.data?.id === '${id}' && p.rows[0].title`), { message: `${id} row` });
+        await press(a, 'Enter');
+      };
+      try {
+        await run('>bookmark page', 'bookmark.toggle');
+        await waitFor(async () => (await marks()).length === 1, { message: 'bookmark created' });
+        await waitFor(async () => !(await a.overlayShown()), { message: 'palette closed' });
+
+        await run('>remove bookmark', 'bookmark.toggle');
+        await waitFor(async () => (await marks()).length === 0, { message: 'bookmark removed' });
+        await waitFor(async () => !(await a.overlayShown()), { message: 'palette closed' });
+
+        await run('>bookmark page in folder', 'bookmark.folder');
+        const folder = await waitFor(() => a.palette(`p.view && p.rows[0]?.kind === 'action' && p.rows[0].data.id`), { message: 'folder picker' });
+        // Esc goes back to the commands, Enter in the picker bookmarks.
+        await press(a, 'Escape');
+        await waitFor(() => a.palette(`!p.view && p.mode === 'commands' && p.query === 'bookmark page in folder'`), { message: 'back to commands' });
+        await press(a, 'Enter');
+        await waitFor(() => a.palette(`p.view && p.rows[0]?.kind === 'action'`), { message: 'folder picker again' });
+        await press(a, 'Enter');
+        const [mark] = await waitFor(async () => {
+          const m = await marks();
+          return m.length === 1 && m;
+        }, { message: 'bookmark in folder' });
+        assert(`folder:${mark.parentId}` === folder, `parent ${mark.parentId}, picked ${folder}`);
+        await waitFor(async () => !(await a.overlayShown()), { message: 'palette closed' });
+      } finally {
+        await swEval(`for (const b of await chrome.bookmarks.search({ url: ${JSON.stringify(url)} })) await chrome.bookmarks.remove(b.id)`);
+      }
+    });
+
     await test('> AI command opens a new Claude chat in a new tab', async () => {
       await a.send('Page.bringToFront');
       await openOn('a', a);

@@ -41,6 +41,7 @@ search the web.
   - copy URL, copy title, copy as a Markdown link; copy every tab in the window as URLs or a Markdown list
   - new, close, duplicate, pin or mute a tab; close other tabs, tabs to the right, or duplicates
   - reload or hard reload; move a tab to a new window; sort tabs by domain; reopen a closed tab
+  - bookmark or unbookmark the page, or bookmark it in (or move it to) a folder you pick
   - new window or incognito window; zoom in, out or reset
   - start a new Claude, ChatGPT, Gemini, DeepSeek or Kimi chat (opens in a new tab)
   - open History, Downloads, Bookmarks, Extensions, Settings or the shortcut settings
